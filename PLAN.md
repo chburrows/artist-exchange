@@ -44,7 +44,7 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 
 - [x] `.gitignore` committed first, alone
 - [x] `PLAN.md`, `CLAUDE.md`, `SETUP.md`
-- [ ] `CONCEPT.md` revised to match locked v1 scope
+- [x] `CONCEPT.md` revised to match locked v1 scope
 - [ ] `uv` installed, Python 3.12 toolchain
 - [ ] `pyproject.toml`, `pnpm-workspace.yaml`, `docker-compose.yml`
 - [ ] `ci.yml` green

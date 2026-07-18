@@ -1,94 +1,68 @@
-# Artist Exchange — Concept Doc
+# Artist Exchange — Concept
+
+**Product truth: what we're building and why.** For how it gets built — schema, formulas, phases — see [`PLAN.md`](./PLAN.md).
 
 ## One-liner
 
-A play-money market where users buy, sell, and short "shares" of musical artists, betting on whether their popularity will rise or fall — part Robinhood, part Kalshi, but the underlying "fundamental" is a real, public popularity index rather than a company balance sheet or a one-time event.
+A play-money market where users buy and sell "shares" of musical artists, betting on whether their popularity will rise. Part Robinhood, part fantasy sports — but the underlying fundamental is a real, public popularity index rather than a balance sheet or a one-time event.
 
-## Problem / insight
+## The insight
 
-Music fans already predict breakout artists informally ("I knew them before they blew up"). There's no venue that turns that instinct into a trackable, competitive, social record — and no lightweight way to bet on _trajectory_ (an artist trending up or down) the way sports betting lets you bet on outcomes. Existing options are either pure gambling (no skill signal) or pure stats-following (no market, no stakes).
+Music fans already predict breakouts informally — "I knew them before they blew up" — but there's nowhere to turn that instinct into a trackable, competitive record. Existing options are either pure gambling (no skill signal) or pure stats-following (no stakes). Nothing lets you bet on *trajectory*.
 
-## Core mechanic: index-anchored hybrid pricing
+## The core bet
 
-This is the crux of the product, so it's worth stating precisely:
+Price is anchored to a real popularity index computed from public data, and drifts toward that index over time. So buying an artist *before* the real-world data catches up is provably rewarded.
 
-- Every listed artist has an **Index Score**: a composite of real, public data (starting with Last.fm listener/scrobble counts and their week-over-week growth rate — see Data Sources below).
-- Every artist also has a **Market Price**, set by user trading via a simple AMM (bonding curve): buys push price up, sells and shorts push it down.
-- On a regular cadence (e.g. nightly), Market Price is nudged some percentage toward the current Index-derived "fair value."
+That single property is what separates this from a meme-stock app (pure vibes, no skill) and from a leaderboard (stats with no stakes). It's what makes "I called it" mean something — and everything else in the product exists to serve it.
 
-Why this matters: it means price is _not_ pure vibes (like a meme stock) and _not_ just a mirrored stat (which would be a leaderboard, not a market). Users who buy an artist before the real-world data catches up are rewarded when the price reverts toward the new, higher fair value. That's the "talent scout" skill the whole product is built around, and it's what makes the leaderboards in this doc meaningful rather than arbitrary.
+Four reasons this should be sticky:
 
-## Data sources (v1)
-
-- **Spotify is not viable**: Spotify has locked down the developer platform (app approval is now required and largely restricted to established use cases, and several previously-public fields — including the `popularity` score — have been pulled back or made unreliable for new apps). Not a foundation we can build on for v1.
-- **Last.fm API** (free, no approval gate — see [`artist.getInfo`](https://www.last.fm/api/show/artist.getInfo)): pulls `listeners` (unique listener count) and `playcount` (total scrobbles) per artist. Last.fm doesn't expose historical trend data itself, so we snapshot these values on our own cadence (e.g. nightly) and derive week-over-week growth rate ourselves — that growth rate plus the absolute listener count are the two inputs to the Index Score.
-- **Future**: once the core loop is validated and revenue can support a paid data subscription, upgrade to a licensed aggregator like **Chartmetric** or **Soundcharts** — these combine cross-platform signals (TikTok, Instagram, YouTube, playlist adds) into a single resistant-to-gaming popularity score, and are the natural v2 data upgrade.
+1. **Skill is real and provable** — being early pays, and the record shows it.
+2. **Discovery becomes a cheap lottery ticket** — "fastest growing, under $10" turns finding an artist into a game with stakes, which is inherently shareable.
+3. **Layered reasons to return** — price moves continuously, the index updates nightly, breakouts play out over months.
+4. **New users can still win** — see Tournaments, below.
 
 ## V1 scope
 
-### Artist universe
+**Artist universe** — a curated list in the low hundreds, in two tiers:
 
-- Curated list (low hundreds), split across two tiers:
-  - **Growth tier** (the core bet): emerging/mid-tier artists plausibly about to break out — this is where the talent-scout mechanic and "under $10" discovery framing do their work.
-  - **Blue-chip tier**: a smaller set of mega-stars (mainstream, universally recognized names). These won't move as dramatically, but they give new users something familiar to trade on day one, lower the barrier to "I get what this app is" on first open, and drive top-of-funnel appeal beyond the music-discovery niche.
-  - This mirrors large-cap vs. small-cap framing in real markets, and gives the discovery feed a natural contrast: "movers" will almost always be growth-tier, which itself reinforces the product's identity once a new user notices the pattern.
-  - Curation can start manual/editorial and later be opened to user submission + admin approval.
+- **Growth tier** — emerging artists plausibly about to break out. This is where the talent-scout mechanic lives, and it's the actual product.
+- **Blue-chip tier** — a smaller set of household names. They won't move much, but they let a new user immediately understand what the app is, and they widen the top of the funnel beyond music-discovery obsessives.
 
-### Trading
+The contrast is itself a feature: "biggest movers" will almost always be growth tier, which teaches the product's identity without a tutorial. Curation starts editorial; user submission with approval can come later.
 
-- Buy/sell long positions in play money.
-- **Short-selling, simplified**: user stakes an amount betting "this artist falls." Payout scales inversely with price change; loss is capped at the stake (no margin, no liquidation). Gain should also be capped at some multiple (e.g. 3x stake) to keep the play-money economy bounded and avoid one runaway short draining the system.
-- No margin, no leverage, no order book in v1 — the AMM handles pricing so there's always a counterparty.
+**Trading** — buy and sell long positions in play money. No margin, no leverage, no order book; an AMM means there's always a counterparty. Every new user starts with a fixed play-money balance.
 
-### Play-money economy
+**Discovery** — feed views that double as marketing hooks: "fastest growing under $10," "biggest movers," "new listings." Plus the per-artist chart showing market price against the index fair-value line. That chart is the product's signature visual and is worth investing in early.
 
-- Starting balance for every new user (e.g. $10,000 play dollars).
-- Daily login bonus / streak mechanic — classic stickiness lever, gives users a reason to open the app even when not actively trading.
-- A balance safety net (small weekly top-up if a user's balance falls near zero) so a bad run doesn't just end the relationship — churn risk if going broke means the app is over for them.
+**Leaderboards** — two, deliberately:
 
-### Discovery
+- *Portfolio return* — straightforward, but structurally favors whoever started earliest.
+- *Talent Scout* — ranks users on gains from positions opened while an artist was still small. This is the one that matters. It measures discovery skill rather than capital or timing luck, and it's the leaderboard the whole product is arguing for.
 
-- Feed views that double as marketing hooks: "Fastest growing, under $10," "Biggest movers today," "Most shorted" (contrarian signal), "New listings."
-- Per-artist price chart, showing Market Price vs. the Index-derived fair value line — this chart _is_ the product's unique visual, worth investing in early.
+## Deferred
 
-### Leaderboards
+Not "cut" — sequenced. Engineering seams for each already exist (see `PLAN.md`).
 
-- **Portfolio leaderboard** (all-time / weekly / monthly % return) — straightforward, but naturally favors early/whale users.
-- **Talent Scout leaderboard**: ranks users by realized gains on positions opened _while the artist was still small_ (e.g. bought under a price/index threshold, or before a defined breakout crossing). This is the leaderboard that actually matters for the product's identity — it rewards discovery skill, not just capital or luck.
+| | Why it waits |
+|---|---|
+| **Short selling** | Roughly doubles position accounting and is where a play-money economy breaks. Few users short in their first session. |
+| **Tournaments** | Time-boxed contests with fresh equal balances — the fix for "the leaderboard is permanently owned by day-one users." Cheap to build on existing infrastructure, but it's a *retention* feature: build it once there's retention worth protecting. |
+| **Daily streaks / balance safety net** | Engagement machinery. Premature before the core loop is proven. |
+| **Richer data** | Licensed aggregators (Chartmetric, Soundcharts) combine TikTok, YouTube, and playlist signals into one hard-to-game score. The natural upgrade once revenue supports it. |
+| **Mobile app** | Web ships faster and iterates faster. Revisit after the loop is validated. |
+| **Deep social** | Following, comments. A shareable portfolio card is a cheap virality lever worth doing first. |
 
-### Tournaments (lightweight, included in v1)
+## Risks to watch
 
-- Time-boxed contests (e.g. monthly) where entrants get a **fresh, equal play-money balance** for the contest window and are ranked by % return over that period.
-- Reuses all existing trading infrastructure — it's a filtered leaderboard with a fair starting condition, not a new system. Low build cost, strong reason to come back on a recurring cadence, and it's the fairness mechanism the open-ended portfolio leaderboard lacks (new users can never catch up to portfolio value built up over months, but they can win a tournament).
-
-## Explicitly out of scope for v1
-
-- Mobile app (start web — faster to ship and iterate; revisit once the core loop is validated).
-- Real-money trading.
-- Deep social features (following traders, comments) — a simple shareable "portfolio/leaderboard card" (screenshot-friendly) is worth considering as a cheap virality lever, but full social graph can wait.
-- Paid multi-provider data aggregation (Chartmetric/Soundcharts) — start with Last.fm's free API only.
-
-## Why this should be sticky (the actual bet of this product)
-
-1. **Skill signal, not just vibes** — the index-anchoring means being early is provably rewarded, which is a stronger hook than a pure prediction market or pure meme-stock app.
-2. **Cheap lottery-ticket discovery** — "under $10, fastest growing" framing turns music discovery into a game with stakes, which is inherently shareable ("I called it").
-3. **Recurring reasons to return** — daily login streaks, nightly index-reversion (did my pick move?), and monthly tournaments layer short, medium, and long re-engagement loops.
-4. **Fair on-ramp for new users** — tournaments prevent the "leaderboard is permanently dominated by day-one users" problem that kills a lot of portfolio-style competitive apps.
-
-## Open questions / risks to watch
-
-- **Economy balancing**: with no real money, inflation of play-money balances over time can make leaderboards meaningless — daily bonuses, safety nets, and short payout caps all need tuning against each other.
-- **Right of publicity**: using real artists' names/likenesses in a trading product, even with play money, warrants a clear "not affiliated with or endorsed by" disclaimer per artist.
-- **Artist curation quality**: the product lives or dies on whether the emerging-artist list actually contains plausible breakouts — this is closer to an editorial/curation problem than an engineering one early on.
+- **Curation quality is the whole product.** If the growth tier doesn't contain real breakouts, nothing else matters. This is an editorial problem, not an engineering one — and it's the closest thing to a moat early on.
+- **Data quality.** Last.fm skews older, more indie, more Western, which makes it weakest exactly where the product needs it most: emerging artists. It's also gameable — see `PLAN.md` Phase 3 for the manipulation defense. A second signal is the real fix.
+- **Economy inflation.** With no real money, balances drift upward over time and leaderboards lose meaning. Trading fees, starting balances, and any future top-ups have to be tuned against each other.
+- **Right of publicity.** Real artists' names in a trading product, even play-money, warrants a clear "not affiliated with or endorsed by" disclaimer. V1 uses generated avatars rather than artist photography.
 
 ## Path to real money (future, not v1)
 
-Worth naming now since it shaped the "play money first" decision: a literal "shares of a person" model is a securities/right-of-publicity problem, since artists aren't consenting, reporting entities the way companies are. The realistic real-money path looks more like Kalshi's — CFTC-regulated **event contracts** on public data thresholds ("will Artist X's index score exceed Y by date Z") rather than open-ended equity-style shares. That's a legal/licensing undertaking on its own, separate from the engineering work, and is the reason play-money v1 is the right sequencing: prove the engagement loop first, then scope the compliance path deliberately.
+Worth naming because it shaped the play-money-first decision. A literal "shares of a person" model is a securities and right-of-publicity problem — artists aren't consenting, reporting entities the way companies are. The realistic path is closer to Kalshi's: CFTC-regulated **event contracts** on public data thresholds ("will Artist X's index exceed Y by date Z"), not open-ended equity-style shares.
 
-## Future development (beyond v1)
-
-- Mobile app once web usage validates the loop.
-- Richer data sources (Chartmetric/Soundcharts subscription) for a more resistant-to-gaming, cross-platform index.
-- Full margin shorting for power users.
-- Social layer: follow traders, comment threads on artists, shareable portfolio cards.
-- Real-money event contracts, pursued as a distinct regulatory track.
+That's a legal undertaking separate from the engineering, which is exactly why play-money v1 is the right sequencing: prove the engagement loop first, then scope the compliance path deliberately.
