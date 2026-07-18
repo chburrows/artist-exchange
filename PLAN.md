@@ -205,7 +205,24 @@ MAGIC_LINK_TTL_MINUTES      = 15
 
 `jobs/recompute.py`: read `metric_snapshots` → compute the cross-sectional index → write `index_snapshots` and `price_history` → set each artist's glide window. Appended to the nightly Action, after the snapshot step.
 
-**Done when:** real fair-value curves exist for ~200 artists across the weeks Phase 1 has been accumulating. First moment the product's core claim is visibly true.
+### Oracle manipulation — the attack the AMM guardrails do *not* cover
+
+The fee/slippage/position-cap guardrails defend against arbitraging the *gap* between market price and fair value. They do nothing against someone who can move **fair value itself**. Last.fm has weak anti-fraud and scrobble bots are cheap, so the attack is:
+
+> buy a small growth-tier artist → point scrobble bots at them → listener growth rises → index score rises → fair value rises → the glide walks market price up over 24h → sell into it.
+
+Nothing anomalous happens from the system's perspective; the fundamentals genuinely "improved." This risk exists regardless of whether the repo is public — a public repo only shortens the attacker's discovery time from a week to an afternoon. **Do not treat repo privacy as a mitigation.**
+
+### Mitigation (build in this phase)
+
+1. **Ratio-divergence flag.** Bot scrobbles distort the listeners↔playcount relationship: playcount explodes while unique listeners barely move (a few accounts looping). Compute `playcount_growth − listeners_growth` per artist per day; flag anything beyond ~3 MAD from the universe.
+2. **Quarantine flagged artists.** A flagged artist's index score is **held at its previous value** — not zeroed, not deleted — until cleared. Nightly job writes the flag and reason into `index_snapshots.components`; the artist still trades, its fair value simply stops responding. Fail-safe: a false positive costs one day of staleness, a true positive costs the attacker their whole thesis.
+3. **Percentile review queue.** Any artist whose index moves more than the 99th percentile of daily moves lands in a `flagged_artists` table for a manual look before affecting price. At 200 artists this is a two-minute daily task and doubles as data-quality monitoring.
+4. **Already helping, for free:** `EWMA_ALPHA = 0.4` damps a one-day spike to ~40% of its raw effect, and `REVERSION_MAX_MOVE_BPS` caps how fast a manipulated score converts into price. Together these turn a one-night smash-and-grab into a multi-day operation with a visible footprint — which is what makes a daily review queue sufficient rather than token.
+
+**The real long-term fix is the second signal.** Gaming Last.fm and YouTube simultaneously is dramatically harder than gaming one. This promotes the YouTube provider from "nice v2 upgrade" to part of the market-integrity story — pull it forward if Phase 3 shows Last.fm is noisy or if any manipulation appears.
+
+**Done when:** real fair-value curves exist for ~200 artists across the weeks Phase 1 has been accumulating (first moment the product's core claim is visibly true), and the divergence flag runs nightly with a reviewable queue.
 
 ---
 
@@ -270,6 +287,11 @@ transactions(id bigserial, user_id, artist_id, kind check in ('GRANT','BUY','SEL
 position_cache(user_id, artist_id, shares, avg_cost_microcents,
                realized_pnl_cents, scout_shares, PK (user_id, artist_id))
 balance_cache(user_id PK, cash_cents, updated_at)
+
+-- oracle-manipulation review queue (Phase 3)
+flagged_artists(artist_id, as_of_date, reason text, detail jsonb,
+                cleared_at timestamptz null, cleared_by text null,
+                PK (artist_id, as_of_date))
 ```
 
 Indexes: `transactions(user_id, created_at)`, `transactions(artist_id, created_at)`, `price_history(artist_id, at DESC)`, `index_snapshots(as_of_date)`.
