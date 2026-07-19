@@ -30,7 +30,7 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 
 ## Progress
 
-- [ ] **Phase 0** — Hygiene, project docs, CI skeleton
+- [x] **Phase 0** — Hygiene, project docs, CI skeleton
 - [ ] **Phase 1** — Schema, snapshotter, deployed ← *critical path, do first*
 - [ ] **Phase 2** — Pure core + invariant tests
 - [ ] **Phase 3** — Index + reversion on real data
@@ -45,9 +45,9 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 - [x] `.gitignore` committed first, alone
 - [x] `PLAN.md`, `CLAUDE.md`, `SETUP.md`
 - [x] `CONCEPT.md` revised to match locked v1 scope
-- [ ] `uv` installed, Python 3.12 toolchain
-- [ ] `pyproject.toml`, `pnpm-workspace.yaml`, `docker-compose.yml`
-- [ ] `ci.yml` green
+- [x] `uv` installed, Python 3.12 toolchain
+- [x] `pyproject.toml`, `pnpm-workspace.yaml`, `docker-compose.yml`
+- [x] `ci.yml` green
 
 **`.gitignore` is committed first, alone, before any broad `git add`.** `secrets.env` is currently untracked in a repo with no commits, so there is no history to scrub and no key rotation needed — provided that ordering holds. This is the single most time-sensitive step in the plan.
 
