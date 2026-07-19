@@ -5,7 +5,7 @@
     "lastfm_name": "Coldplay",
     "lastfm_mbid": "cc197bad-dc9c-440d-a5b5-d52ba2e14234",
     "tier": "blue_chip",
-    "listeners_at_seed": 9229646
+    "listeners_at_seed": 9230892
   },
   {
     "slug": "rihanna",
@@ -13,7 +13,7 @@
     "lastfm_name": "Rihanna",
     "lastfm_mbid": "73e5e69d-3554-40d8-8516-00cb38737a1c",
     "tier": "blue_chip",
-    "listeners_at_seed": 8436184
+    "listeners_at_seed": 8437754
   },
   {
     "slug": "radiohead",
@@ -21,7 +21,7 @@
     "lastfm_name": "Radiohead",
     "lastfm_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
     "tier": "blue_chip",
-    "listeners_at_seed": 8366781
+    "listeners_at_seed": 8368090
   },
   {
     "slug": "kanye-west",
@@ -29,7 +29,15 @@
     "lastfm_name": "Kanye West",
     "lastfm_mbid": null,
     "tier": "blue_chip",
-    "listeners_at_seed": 8064464
+    "listeners_at_seed": 8065709
+  },
+  {
+    "slug": "eminem",
+    "name": "Eminem",
+    "lastfm_name": "Eminem",
+    "lastfm_mbid": "b95ce3ff-3d05-4e87-9e01-c97b66af13d4",
+    "tier": "blue_chip",
+    "listeners_at_seed": 7896331
   },
   {
     "slug": "lady-gaga",
@@ -37,15 +45,7 @@
     "lastfm_name": "Lady Gaga",
     "lastfm_mbid": "650e7db6-b795-4eb5-a702-5ea2fc46c848",
     "tier": "blue_chip",
-    "listeners_at_seed": 7852679
-  },
-  {
-    "slug": "nirvana",
-    "name": "Nirvana",
-    "lastfm_name": "Nirvana",
-    "lastfm_mbid": "5b11f4ce-a62d-471e-81fc-a69a8278c7da",
-    "tier": "blue_chip",
-    "listeners_at_seed": 7644381
+    "listeners_at_seed": 7854253
   },
   {
     "slug": "red-hot-chili-peppers",
@@ -53,7 +53,7 @@
     "lastfm_name": "Red Hot Chili Peppers",
     "lastfm_mbid": "8bfac288-ccc5-448d-9573-c33ea2aa5c30",
     "tier": "blue_chip",
-    "listeners_at_seed": 7364125
+    "listeners_at_seed": 7365410
   },
   {
     "slug": "katy-perry",
@@ -61,15 +61,7 @@
     "lastfm_name": "Katy Perry",
     "lastfm_mbid": "122d63fc-8671-43e4-9752-34e846d62a9c",
     "tier": "blue_chip",
-    "listeners_at_seed": 7320006
-  },
-  {
-    "slug": "arctic-monkeys",
-    "name": "Arctic Monkeys",
-    "lastfm_name": "Arctic Monkeys",
-    "lastfm_mbid": "ada7a83c-e3e1-40f1-93f9-3e73dbc9298a",
-    "tier": "blue_chip",
-    "listeners_at_seed": 7224278
+    "listeners_at_seed": 7321805
   },
   {
     "slug": "michael-jackson",
@@ -77,7 +69,15 @@
     "lastfm_name": "Michael Jackson",
     "lastfm_mbid": "f27ec8db-af05-4f36-916e-3d57f91ecf5e",
     "tier": "blue_chip",
-    "listeners_at_seed": 7128195
+    "listeners_at_seed": 7130209
+  },
+  {
+    "slug": "the-killers",
+    "name": "The Killers",
+    "lastfm_name": "The Killers",
+    "lastfm_mbid": "95e1ead9-4d31-4808-a7ac-32c3614c116b",
+    "tier": "blue_chip",
+    "listeners_at_seed": 7069216
   },
   {
     "slug": "linkin-park",
@@ -85,7 +85,7 @@
     "lastfm_name": "Linkin Park",
     "lastfm_mbid": "f59c5520-5f46-4d2c-b2c4-822eabf53419",
     "tier": "blue_chip",
-    "listeners_at_seed": 7055778
+    "listeners_at_seed": 7057133
   },
   {
     "slug": "gorillaz",
@@ -93,7 +93,7 @@
     "lastfm_name": "Gorillaz",
     "lastfm_mbid": "e21857d5-3256-4547-afb3-4b6ded592596",
     "tier": "blue_chip",
-    "listeners_at_seed": 6972310
+    "listeners_at_seed": 6973465
   },
   {
     "slug": "drake",
@@ -101,7 +101,7 @@
     "lastfm_name": "Drake",
     "lastfm_mbid": "9fff2f8a-21e6-47de-a2b8-7f449929d43f",
     "tier": "blue_chip",
-    "listeners_at_seed": 6854377
+    "listeners_at_seed": 6855479
   },
   {
     "slug": "maroon-5",
@@ -109,7 +109,15 @@
     "lastfm_name": "Maroon 5",
     "lastfm_mbid": "0ab49580-c84f-44d4-875f-d83760ea2cfe",
     "tier": "blue_chip",
-    "listeners_at_seed": 6773891
+    "listeners_at_seed": 6775445
+  },
+  {
+    "slug": "green-day",
+    "name": "Green Day",
+    "lastfm_name": "Green Day",
+    "lastfm_mbid": "084308bd-1654-436f-ba03-df6697104e19",
+    "tier": "blue_chip",
+    "listeners_at_seed": 6706087
   },
   {
     "slug": "the-beatles",
@@ -117,15 +125,7 @@
     "lastfm_name": "The Beatles",
     "lastfm_mbid": "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d",
     "tier": "blue_chip",
-    "listeners_at_seed": 6621950
-  },
-  {
-    "slug": "britney-spears",
-    "name": "Britney Spears",
-    "lastfm_name": "Britney Spears",
-    "lastfm_mbid": "45a663b5-b1cb-4a91-bff6-2bef7bbfdd76",
-    "tier": "blue_chip",
-    "listeners_at_seed": 6577684
+    "listeners_at_seed": 6623541
   },
   {
     "slug": "beyonce",
@@ -133,7 +133,15 @@
     "lastfm_name": "Beyoncé",
     "lastfm_mbid": "859d0860-d480-4efd-970c-c05d5f1776b8",
     "tier": "blue_chip",
-    "listeners_at_seed": 6495830
+    "listeners_at_seed": 6497354
+  },
+  {
+    "slug": "daft-punk",
+    "name": "Daft Punk",
+    "lastfm_name": "Daft Punk",
+    "lastfm_mbid": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+    "tier": "blue_chip",
+    "listeners_at_seed": 6423341
   },
   {
     "slug": "taylor-swift",
@@ -141,15 +149,7 @@
     "lastfm_name": "Taylor Swift",
     "lastfm_mbid": "20244d07-534f-4eff-b4d4-930878889970",
     "tier": "blue_chip",
-    "listeners_at_seed": 6051518
-  },
-  {
-    "slug": "oasis",
-    "name": "Oasis",
-    "lastfm_name": "Oasis",
-    "lastfm_mbid": "39ab1aed-75e0-4140-bd47-540276886b60",
-    "tier": "blue_chip",
-    "listeners_at_seed": 6026549
+    "listeners_at_seed": 6052649
   },
   {
     "slug": "the-strokes",
@@ -157,15 +157,7 @@
     "lastfm_name": "The Strokes",
     "lastfm_mbid": "f181961b-20f7-459e-89de-920ef03c7ed0",
     "tier": "blue_chip",
-    "listeners_at_seed": 5817489
-  },
-  {
-    "slug": "madonna",
-    "name": "Madonna",
-    "lastfm_name": "Madonna",
-    "lastfm_mbid": "79239441-bfd5-4981-a70c-55c3f15c1287",
-    "tier": "blue_chip",
-    "listeners_at_seed": 5813356
+    "listeners_at_seed": 5818466
   },
   {
     "slug": "paramore",
@@ -173,15 +165,15 @@
     "lastfm_name": "Paramore",
     "lastfm_mbid": "44cf61b8-5197-448a-b82b-cef6ee89fac5",
     "tier": "blue_chip",
-    "listeners_at_seed": 5772147
+    "listeners_at_seed": 5773727
   },
   {
-    "slug": "the-cure",
-    "name": "The Cure",
-    "lastfm_name": "The Cure",
-    "lastfm_mbid": "69ee3720-a7cb-4402-b48d-a02c366f2bcf",
+    "slug": "weezer",
+    "name": "Weezer",
+    "lastfm_name": "Weezer",
+    "lastfm_mbid": "6fe07aa5-fec0-4eca-a456-f29bff451b04",
     "tier": "blue_chip",
-    "listeners_at_seed": 5641031
+    "listeners_at_seed": 5587528
   },
   {
     "slug": "the-weeknd",
@@ -189,7 +181,7 @@
     "lastfm_name": "The Weeknd",
     "lastfm_mbid": "c8b03190-306c-4120-bb0b-6f2ebfc06ea9",
     "tier": "blue_chip",
-    "listeners_at_seed": 5443986
+    "listeners_at_seed": 5445278
   },
   {
     "slug": "bruno-mars",
@@ -197,7 +189,7 @@
     "lastfm_name": "Bruno Mars",
     "lastfm_mbid": "afb680f2-b6eb-4cd7-a70b-a63b25c763d5",
     "tier": "blue_chip",
-    "listeners_at_seed": 5381316
+    "listeners_at_seed": 5382637
   },
   {
     "slug": "lana-del-rey",
@@ -205,7 +197,7 @@
     "lastfm_name": "Lana Del Rey",
     "lastfm_mbid": "b7539c32-53e7-4908-bda3-81449c367da6",
     "tier": "blue_chip",
-    "listeners_at_seed": 5373783
+    "listeners_at_seed": 5375011
   },
   {
     "slug": "kendrick-lamar",
@@ -213,15 +205,7 @@
     "lastfm_name": "Kendrick Lamar",
     "lastfm_mbid": "381086ea-f511-4aba-bdf9-71c753dc5077",
     "tier": "blue_chip",
-    "listeners_at_seed": 5206132
-  },
-  {
-    "slug": "the-smiths",
-    "name": "The Smiths",
-    "lastfm_name": "The Smiths",
-    "lastfm_mbid": "40f5d9e4-2de7-4f2d-ad41-e31a9a9fea27",
-    "tier": "blue_chip",
-    "listeners_at_seed": 5192081
+    "listeners_at_seed": 5207260
   },
   {
     "slug": "calvin-harris",
@@ -229,15 +213,7 @@
     "lastfm_name": "Calvin Harris",
     "lastfm_mbid": "8dd98bdc-80ec-4e93-8509-2f46bafc09a7",
     "tier": "blue_chip",
-    "listeners_at_seed": 5148295
-  },
-  {
-    "slug": "fleetwood-mac",
-    "name": "Fleetwood Mac",
-    "lastfm_name": "Fleetwood Mac",
-    "lastfm_mbid": "bd13909f-1c29-4c27-a874-d4aaf27c5b1a",
-    "tier": "blue_chip",
-    "listeners_at_seed": 5006117
+    "listeners_at_seed": 5149743
   },
   {
     "slug": "justin-bieber",
@@ -245,7 +221,7 @@
     "lastfm_name": "Justin Bieber",
     "lastfm_mbid": "e0140a67-e4d1-4f13-8a01-364355bee46e",
     "tier": "blue_chip",
-    "listeners_at_seed": 4985646
+    "listeners_at_seed": 4987047
   },
   {
     "slug": "my-chemical-romance",
@@ -253,7 +229,7 @@
     "lastfm_name": "My Chemical Romance",
     "lastfm_mbid": "c07f0676-9143-4217-8a9f-4c26bd636f13",
     "tier": "blue_chip",
-    "listeners_at_seed": 4933202
+    "listeners_at_seed": 4934259
   },
   {
     "slug": "ariana-grande",
@@ -261,7 +237,7 @@
     "lastfm_name": "Ariana Grande",
     "lastfm_mbid": "f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387",
     "tier": "blue_chip",
-    "listeners_at_seed": 4618431
+    "listeners_at_seed": 4619782
   },
   {
     "slug": "tame-impala",
@@ -269,7 +245,7 @@
     "lastfm_name": "Tame Impala",
     "lastfm_mbid": "63aa26c3-d59b-4da4-84ac-716b54f1ef4d",
     "tier": "blue_chip",
-    "listeners_at_seed": 4554885
+    "listeners_at_seed": 4556508
   },
   {
     "slug": "tyler-the-creator",
@@ -277,7 +253,7 @@
     "lastfm_name": "Tyler, The Creator",
     "lastfm_mbid": "f6beac20-5dfe-4d1f-ae02-0b0a740aafd6",
     "tier": "blue_chip",
-    "listeners_at_seed": 4436125
+    "listeners_at_seed": 4437260
   },
   {
     "slug": "frank-ocean",
@@ -285,7 +261,7 @@
     "lastfm_name": "Frank Ocean",
     "lastfm_mbid": "e520459c-dff4-491d-a6e4-c97be35e0044",
     "tier": "blue_chip",
-    "listeners_at_seed": 4362188
+    "listeners_at_seed": 4363220
   },
   {
     "slug": "deftones",
@@ -293,7 +269,7 @@
     "lastfm_name": "Deftones",
     "lastfm_mbid": "7527f6c2-d762-4b88-b5e2-9244f1e34c46",
     "tier": "blue_chip",
-    "listeners_at_seed": 4341266
+    "listeners_at_seed": 4342584
   },
   {
     "slug": "billie-eilish",
@@ -301,7 +277,7 @@
     "lastfm_name": "Billie Eilish",
     "lastfm_mbid": "f4abc0b5-3f7a-4eff-8f78-ac078dbce533",
     "tier": "blue_chip",
-    "listeners_at_seed": 4336188
+    "listeners_at_seed": 4337245
   },
   {
     "slug": "the-neighbourhood",
@@ -309,7 +285,7 @@
     "lastfm_name": "The Neighbourhood",
     "lastfm_mbid": "53b06622-ec51-4924-a554-58b0affde6b5",
     "tier": "blue_chip",
-    "listeners_at_seed": 4080726
+    "listeners_at_seed": 4081904
   },
   {
     "slug": "childish-gambino",
@@ -317,7 +293,7 @@
     "lastfm_name": "Childish Gambino",
     "lastfm_mbid": "7fb57fba-a6ef-44c2-abab-2fa3bdee607e",
     "tier": "blue_chip",
-    "listeners_at_seed": 3931198
+    "listeners_at_seed": 3932467
   },
   {
     "slug": "charli-xcx",
@@ -325,7 +301,7 @@
     "lastfm_name": "Charli xcx",
     "lastfm_mbid": "260b6184-8828-48eb-945c-bc4cb6fc34ca",
     "tier": "blue_chip",
-    "listeners_at_seed": 3873613
+    "listeners_at_seed": 3874578
   },
   {
     "slug": "lorde",
@@ -333,7 +309,7 @@
     "lastfm_name": "Lorde",
     "lastfm_mbid": "8e494408-8620-4c6a-82c2-c2ca4a1e4f12",
     "tier": "blue_chip",
-    "listeners_at_seed": 3805397
+    "listeners_at_seed": 3806368
   },
   {
     "slug": "doja-cat",
@@ -341,7 +317,7 @@
     "lastfm_name": "Doja Cat",
     "lastfm_mbid": "5df62a88-cac9-490a-b62c-c7c88f4020f4",
     "tier": "blue_chip",
-    "listeners_at_seed": 3739906
+    "listeners_at_seed": 3741101
   },
   {
     "slug": "mac-miller",
@@ -349,7 +325,15 @@
     "lastfm_name": "Mac Miller",
     "lastfm_mbid": "a0e8a1b1-5f8f-475a-a253-17415c17d0ff",
     "tier": "blue_chip",
-    "listeners_at_seed": 3658568
+    "listeners_at_seed": 3659881
+  },
+  {
+    "slug": "post-malone",
+    "name": "Post Malone",
+    "lastfm_name": "Post Malone",
+    "lastfm_mbid": "b1e26560-60e5-4236-bbdb-9aa5a8d5ee19",
+    "tier": "blue_chip",
+    "listeners_at_seed": 3641283
   },
   {
     "slug": "sza",
@@ -357,7 +341,7 @@
     "lastfm_name": "SZA",
     "lastfm_mbid": "272989c8-5535-492d-a25c-9f58803e027f",
     "tier": "blue_chip",
-    "listeners_at_seed": 3589922
+    "listeners_at_seed": 3590960
   },
   {
     "slug": "a-ap-rocky",
@@ -365,15 +349,7 @@
     "lastfm_name": "A$AP Rocky",
     "lastfm_mbid": "25b7b584-d952-4662-a8b9-dd8cdfbfeb64",
     "tier": "blue_chip",
-    "listeners_at_seed": 3549130
-  },
-  {
-    "slug": "twenty-one-pilots",
-    "name": "Twenty One Pilots",
-    "lastfm_name": "Twenty One Pilots",
-    "lastfm_mbid": "a6c6897a-7415-4f8d-b5a5-3a5e05f3be67",
-    "tier": "blue_chip",
-    "listeners_at_seed": 3496998
+    "listeners_at_seed": 3550167
   },
   {
     "slug": "harry-styles",
@@ -381,7 +357,7 @@
     "lastfm_name": "Harry Styles",
     "lastfm_mbid": "7eb1ce54-a355-41f9-8d68-e018b096d427",
     "tier": "blue_chip",
-    "listeners_at_seed": 3439695
+    "listeners_at_seed": 3441060
   },
   {
     "slug": "travis-scott",
@@ -389,7 +365,7 @@
     "lastfm_name": "Travis Scott",
     "lastfm_mbid": "e4a51f17-a57b-47b1-b37b-f552d0f8e9e6",
     "tier": "blue_chip",
-    "listeners_at_seed": 3420599
+    "listeners_at_seed": 3421503
   },
   {
     "slug": "mitski",
@@ -397,15 +373,7 @@
     "lastfm_name": "Mitski",
     "lastfm_mbid": "fa58cf24-0e44-421d-8519-8bf461dcfaa5",
     "tier": "blue_chip",
-    "listeners_at_seed": 3368309
-  },
-  {
-    "slug": "mac-demarco",
-    "name": "Mac DeMarco",
-    "lastfm_name": "Mac DeMarco",
-    "lastfm_mbid": "f2492c31-54a8-4347-a1fc-f81f72873bbf",
-    "tier": "blue_chip",
-    "listeners_at_seed": 3363662
+    "listeners_at_seed": 3369444
   },
   {
     "slug": "sabrina-carpenter",
@@ -413,7 +381,7 @@
     "lastfm_name": "Sabrina Carpenter",
     "lastfm_mbid": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
     "tier": "blue_chip",
-    "listeners_at_seed": 3352082
+    "listeners_at_seed": 3353168
   },
   {
     "slug": "future",
@@ -421,7 +389,7 @@
     "lastfm_name": "Future",
     "lastfm_mbid": "48262e82-db9f-4a92-b650-dfef979b73ec",
     "tier": "blue_chip",
-    "listeners_at_seed": 3311357
+    "listeners_at_seed": 3312425
   },
   {
     "slug": "olivia-rodrigo",
@@ -429,7 +397,7 @@
     "lastfm_name": "Olivia Rodrigo",
     "lastfm_mbid": "6925db17-f35e-42f3-a4eb-84ee6bf5d4b0",
     "tier": "blue_chip",
-    "listeners_at_seed": 3289604
+    "listeners_at_seed": 3291219
   },
   {
     "slug": "steve-lacy",
@@ -437,7 +405,7 @@
     "lastfm_name": "Steve Lacy",
     "lastfm_mbid": "ca9766a0-1c30-43e6-a213-bac1334efc4a",
     "tier": "blue_chip",
-    "listeners_at_seed": 3241372
+    "listeners_at_seed": 3243456
   },
   {
     "slug": "pinkpantheress",
@@ -445,7 +413,23 @@
     "lastfm_name": "PinkPantheress",
     "lastfm_mbid": "7441014f-f8f5-494f-81db-ff166fbc078d",
     "tier": "blue_chip",
-    "listeners_at_seed": 3225404
+    "listeners_at_seed": 3226975
+  },
+  {
+    "slug": "kali-uchis",
+    "name": "Kali Uchis",
+    "lastfm_name": "Kali Uchis",
+    "lastfm_mbid": "d0c7656d-8169-4f77-9dbe-b8f24e40105d",
+    "tier": "blue_chip",
+    "listeners_at_seed": 3164877
+  },
+  {
+    "slug": "joji",
+    "name": "Joji",
+    "lastfm_name": "Joji",
+    "lastfm_mbid": "74922d42-c3ec-4f7d-8a24-20da6eda6ba6",
+    "tier": "blue_chip",
+    "listeners_at_seed": 3117134
   },
   {
     "slug": "clairo",
@@ -453,7 +437,15 @@
     "lastfm_name": "Clairo",
     "lastfm_mbid": "d786f59b-1836-4ddb-8393-ab753edbe984",
     "tier": "blue_chip",
-    "listeners_at_seed": 3031547
+    "listeners_at_seed": 3032740
+  },
+  {
+    "slug": "cigarettes-after-sex",
+    "name": "Cigarettes After Sex",
+    "lastfm_name": "Cigarettes After Sex",
+    "lastfm_mbid": "34557d8f-ee4a-44ab-ae6e-49bb8ac604d0",
+    "tier": "blue_chip",
+    "listeners_at_seed": 2993094
   },
   {
     "slug": "tv-girl",
@@ -461,7 +453,7 @@
     "lastfm_name": "TV Girl",
     "lastfm_mbid": "38f0c7ac-46eb-49ca-b3ab-c785ccd05a60",
     "tier": "blue_chip",
-    "listeners_at_seed": 2960843
+    "listeners_at_seed": 2962093
   },
   {
     "slug": "lil-uzi-vert",
@@ -469,7 +461,7 @@
     "lastfm_name": "Lil Uzi Vert",
     "lastfm_mbid": "8837b875-3689-4646-b3fd-d8b53815c7a8",
     "tier": "blue_chip",
-    "listeners_at_seed": 2833897
+    "listeners_at_seed": 2834831
   },
   {
     "slug": "beabadoobee",
@@ -477,7 +469,7 @@
     "lastfm_name": "beabadoobee",
     "lastfm_mbid": "88d17133-abbc-42db-9526-4e2c1db60336",
     "tier": "blue_chip",
-    "listeners_at_seed": 2749082
+    "listeners_at_seed": 2750519
   },
   {
     "slug": "dominic-fike",
@@ -485,7 +477,7 @@
     "lastfm_name": "Dominic Fike",
     "lastfm_mbid": "e337c918-098f-418e-97a2-81dc224b1bf9",
     "tier": "blue_chip",
-    "listeners_at_seed": 2730252
+    "listeners_at_seed": 2732161
   },
   {
     "slug": "bad-bunny",
@@ -493,7 +485,7 @@
     "lastfm_name": "Bad Bunny",
     "lastfm_mbid": "89aa5ecb-59ad-46f5-b3eb-2d424e941f19",
     "tier": "blue_chip",
-    "listeners_at_seed": 2688401
+    "listeners_at_seed": 2689796
   },
   {
     "slug": "chappell-roan",
@@ -501,7 +493,7 @@
     "lastfm_name": "Chappell Roan",
     "lastfm_mbid": "56a55378-f155-48de-80a5-d80104221267",
     "tier": "blue_chip",
-    "listeners_at_seed": 2654782
+    "listeners_at_seed": 2655800
   },
   {
     "slug": "don-toliver",
@@ -509,7 +501,7 @@
     "lastfm_name": "Don Toliver",
     "lastfm_mbid": "a0723a3c-4135-438e-85c5-012712144ede",
     "tier": "blue_chip",
-    "listeners_at_seed": 2646703
+    "listeners_at_seed": 2647730
   },
   {
     "slug": "the-marias",
@@ -517,7 +509,7 @@
     "lastfm_name": "The Marías",
     "lastfm_mbid": "7a3970c9-ecd8-4eee-a267-4d8c77d97ff3",
     "tier": "blue_chip",
-    "listeners_at_seed": 2616726
+    "listeners_at_seed": 2618094
   },
   {
     "slug": "playboi-carti",
@@ -525,7 +517,7 @@
     "lastfm_name": "Playboi Carti",
     "lastfm_mbid": "2baf3276-ed6a-4349-8d2e-f4601e7b2167",
     "tier": "blue_chip",
-    "listeners_at_seed": 2549976
+    "listeners_at_seed": 2550710
   },
   {
     "slug": "bts",
@@ -533,31 +525,47 @@
     "lastfm_name": "BTS",
     "lastfm_mbid": "0d79fe8e-ba27-4859-bb8c-2f255f346853",
     "tier": "blue_chip",
-    "listeners_at_seed": 2540567
+    "listeners_at_seed": 2541510
   },
   {
-    "slug": "sombr",
-    "name": "sombr",
-    "lastfm_name": "sombr",
-    "lastfm_mbid": "502cf908-9921-48bc-bf0e-265c881c0156",
+    "slug": "zara-larsson",
+    "name": "Zara Larsson",
+    "lastfm_name": "Zara Larsson",
+    "lastfm_mbid": "134e6410-6954-45d1-bd4a-0f2d2ad5471d",
     "tier": "blue_chip",
-    "listeners_at_seed": 2008078
+    "listeners_at_seed": 2490255
   },
   {
-    "slug": "le-sserafim",
-    "name": "LE SSERAFIM",
-    "lastfm_name": "LE SSERAFIM",
-    "lastfm_mbid": "1ee37742-1e3d-4e61-84d2-bc85f4c1459a",
+    "slug": "laufey",
+    "name": "Laufey",
+    "lastfm_name": "Laufey",
+    "lastfm_mbid": "21a89505-10a9-4ac0-8388-833bc07b9f86",
     "tier": "blue_chip",
-    "listeners_at_seed": 1795786
+    "listeners_at_seed": 2466694
   },
   {
-    "slug": "malcolm-todd",
-    "name": "Malcolm Todd",
-    "lastfm_name": "Malcolm Todd",
-    "lastfm_mbid": "6c2a79b8-2b5c-4c2d-b495-6a446811bf9d",
+    "slug": "tate-mcrae",
+    "name": "Tate McRae",
+    "lastfm_name": "Tate McRae",
+    "lastfm_mbid": "f9133869-f87c-459c-9aa7-2f176cda7e06",
     "tier": "blue_chip",
-    "listeners_at_seed": 1650489
+    "listeners_at_seed": 2344229
+  },
+  {
+    "slug": "addison-rae",
+    "name": "Addison Rae",
+    "lastfm_name": "Addison Rae",
+    "lastfm_mbid": "610b71d9-fa78-47d6-9073-083922e73840",
+    "tier": "blue_chip",
+    "listeners_at_seed": 1677612
+  },
+  {
+    "slug": "2hollis",
+    "name": "2hollis",
+    "lastfm_name": "2hollis",
+    "lastfm_mbid": "8bd5a8fb-4c25-401d-a597-2c24affdd5c5",
+    "tier": "growth",
+    "listeners_at_seed": 880055
   },
   {
     "slug": "zion-lennox",
@@ -565,7 +573,31 @@
     "lastfm_name": "Zion & Lennox",
     "lastfm_mbid": "a06afacd-7894-442e-95ba-49366b2b3e02",
     "tier": "growth",
-    "listeners_at_seed": 877022
+    "listeners_at_seed": 877823
+  },
+  {
+    "slug": "farruko",
+    "name": "Farruko",
+    "lastfm_name": "Farruko",
+    "lastfm_mbid": "d2b3524f-67e8-45ef-bfc1-693cac525135",
+    "tier": "growth",
+    "listeners_at_seed": 853323
+  },
+  {
+    "slug": "dijon",
+    "name": "Dijon",
+    "lastfm_name": "Dijon",
+    "lastfm_mbid": "d1974dfb-9e85-42ae-9905-0bad8fe19cf9",
+    "tier": "growth",
+    "listeners_at_seed": 849580
+  },
+  {
+    "slug": "maxwell",
+    "name": "Maxwell",
+    "lastfm_name": "Maxwell",
+    "lastfm_mbid": "d252cca8-8214-43e5-b81a-101eb4a1447e",
+    "tier": "growth",
+    "listeners_at_seed": 848213
   },
   {
     "slug": "ateez",
@@ -581,7 +613,15 @@
     "lastfm_name": "Tainy",
     "lastfm_mbid": "7e92584c-ca97-48bf-8a12-0327db0f6ac8",
     "tier": "growth",
-    "listeners_at_seed": 845443
+    "listeners_at_seed": 845832
+  },
+  {
+    "slug": "burna-boy",
+    "name": "Burna Boy",
+    "lastfm_name": "Burna Boy",
+    "lastfm_mbid": "78a19169-ac75-4868-b504-7e2e073118e0",
+    "tier": "growth",
+    "listeners_at_seed": 844421
   },
   {
     "slug": "stormzy",
@@ -589,7 +629,7 @@
     "lastfm_name": "Stormzy",
     "lastfm_mbid": "67fd5116-7a49-4abf-a34f-b08774128a7a",
     "tier": "growth",
-    "listeners_at_seed": 827819
+    "listeners_at_seed": 828017
   },
   {
     "slug": "black-country-new-road",
@@ -597,7 +637,7 @@
     "lastfm_name": "Black Country, New Road",
     "lastfm_mbid": "e9403d9c-329b-4108-a26f-564159d441d9",
     "tier": "growth",
-    "listeners_at_seed": 827573
+    "listeners_at_seed": 827854
   },
   {
     "slug": "kordhell",
@@ -605,7 +645,15 @@
     "lastfm_name": "Kordhell",
     "lastfm_mbid": "e97e9533-a69b-431d-a88f-e9a519be6c0d",
     "tier": "growth",
-    "listeners_at_seed": 818572
+    "listeners_at_seed": 818774
+  },
+  {
+    "slug": "nmixx",
+    "name": "NMIXX",
+    "lastfm_name": "NMIXX",
+    "lastfm_mbid": "2d623e82-73e2-4179-9c44-e963980f2d58",
+    "tier": "growth",
+    "listeners_at_seed": 802743
   },
   {
     "slug": "tems",
@@ -613,7 +661,7 @@
     "lastfm_name": "Tems",
     "lastfm_mbid": "5b2a8faa-ffee-4706-a1a8-58f109bc8ca2",
     "tier": "growth",
-    "listeners_at_seed": 786013
+    "listeners_at_seed": 786376
   },
   {
     "slug": "julie",
@@ -621,7 +669,7 @@
     "lastfm_name": "Julie",
     "lastfm_mbid": "4b3392b5-704e-461e-95a3-da8e94c9d4e0",
     "tier": "growth",
-    "listeners_at_seed": 779358
+    "listeners_at_seed": 779713
   },
   {
     "slug": "adore",
@@ -629,7 +677,7 @@
     "lastfm_name": "Adore",
     "lastfm_mbid": "07c61b06-7037-45cc-8f87-3d413fca42be",
     "tier": "growth",
-    "listeners_at_seed": 771896
+    "listeners_at_seed": 772481
   },
   {
     "slug": "whirr",
@@ -637,7 +685,7 @@
     "lastfm_name": "Whirr",
     "lastfm_mbid": "3474a13f-899f-40ec-9d5c-e44e41a02900",
     "tier": "growth",
-    "listeners_at_seed": 756674
+    "listeners_at_seed": 757091
   },
   {
     "slug": "mom-jeans",
@@ -645,15 +693,7 @@
     "lastfm_name": "Mom Jeans.",
     "lastfm_mbid": "65e60a4a-4e52-48b3-ade4-bdfed2c94b3e",
     "tier": "growth",
-    "listeners_at_seed": 750679
-  },
-  {
-    "slug": "ado",
-    "name": "Ado",
-    "lastfm_name": "Ado",
-    "lastfm_mbid": "ca195d97-30d9-4870-8a52-7fd3c2e175c3",
-    "tier": "growth",
-    "listeners_at_seed": 742563
+    "listeners_at_seed": 751009
   },
   {
     "slug": "lsd-and-the-search-for-god",
@@ -661,7 +701,7 @@
     "lastfm_name": "LSD and the Search for God",
     "lastfm_mbid": "0e24f776-4158-4934-8b78-b4b1edb3ad62",
     "tier": "growth",
-    "listeners_at_seed": 737293
+    "listeners_at_seed": 737670
   },
   {
     "slug": "shygirl",
@@ -669,7 +709,7 @@
     "lastfm_name": "Shygirl",
     "lastfm_mbid": "9385f1a7-8623-4d0c-b171-f1e6e87220c5",
     "tier": "growth",
-    "listeners_at_seed": 733694
+    "listeners_at_seed": 733902
   },
   {
     "slug": "you-ll-never-get-to-heaven",
@@ -677,7 +717,7 @@
     "lastfm_name": "You'll Never Get to Heaven",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 701847
+    "listeners_at_seed": 702521
   },
   {
     "slug": "lay-bankz",
@@ -685,7 +725,7 @@
     "lastfm_name": "Lay Bankz",
     "lastfm_mbid": "e5a2ad03-b5bd-4c56-97ce-bb574f00a19e",
     "tier": "growth",
-    "listeners_at_seed": 697967
+    "listeners_at_seed": 698183
   },
   {
     "slug": "pale-saints",
@@ -693,7 +733,7 @@
     "lastfm_name": "Pale Saints",
     "lastfm_mbid": "1584532a-62ed-4cbe-ad95-6def0af7df35",
     "tier": "growth",
-    "listeners_at_seed": 692400
+    "listeners_at_seed": 692783
   },
   {
     "slug": "temporex",
@@ -701,7 +741,7 @@
     "lastfm_name": "TEMPOREX",
     "lastfm_mbid": "2ace98e6-69b6-445e-b66d-a70a05f4ece0",
     "tier": "growth",
-    "listeners_at_seed": 691875
+    "listeners_at_seed": 692125
   },
   {
     "slug": "take-care",
@@ -709,7 +749,7 @@
     "lastfm_name": "Take Care",
     "lastfm_mbid": "3beae394-1b0e-4fce-9c1d-e2827754e4e3",
     "tier": "growth",
-    "listeners_at_seed": 689980
+    "listeners_at_seed": 690254
   },
   {
     "slug": "red-house-painters",
@@ -717,7 +757,15 @@
     "lastfm_name": "Red House Painters",
     "lastfm_mbid": "06e59c30-5e21-4318-96e8-7a5f7e309af1",
     "tier": "growth",
-    "listeners_at_seed": 684163
+    "listeners_at_seed": 684440
+  },
+  {
+    "slug": "slowthai",
+    "name": "slowthai",
+    "lastfm_name": "slowthai",
+    "lastfm_mbid": "333e76b4-9606-4fd3-bcb3-8e7660bb4d96",
+    "tier": "growth",
+    "listeners_at_seed": 683931
   },
   {
     "slug": "ecco2k",
@@ -725,7 +773,7 @@
     "lastfm_name": "Ecco2K",
     "lastfm_mbid": "66ab36ce-8f58-46fb-9284-396c2c90ecbd",
     "tier": "growth",
-    "listeners_at_seed": 672861
+    "listeners_at_seed": 673035
   },
   {
     "slug": "durand-jones-the-indications",
@@ -733,7 +781,7 @@
     "lastfm_name": "Durand Jones & The Indications",
     "lastfm_mbid": "5da8d9b1-af89-43a3-a519-8e32ec21e7f5",
     "tier": "growth",
-    "listeners_at_seed": 664171
+    "listeners_at_seed": 664556
   },
   {
     "slug": "oklou",
@@ -741,7 +789,15 @@
     "lastfm_name": "Oklou",
     "lastfm_mbid": "13e2db47-3010-48b8-a8b9-667551f37119",
     "tier": "growth",
-    "listeners_at_seed": 657491
+    "listeners_at_seed": 657922
+  },
+  {
+    "slug": "still-corners",
+    "name": "Still Corners",
+    "lastfm_name": "Still Corners",
+    "lastfm_mbid": "ea5493df-b8d9-4c89-bd5b-6c4aeba7a0ac",
+    "tier": "growth",
+    "listeners_at_seed": 642920
   },
   {
     "slug": "dvrst",
@@ -749,7 +805,7 @@
     "lastfm_name": "DVRST",
     "lastfm_mbid": "b04b7c24-59d2-47f8-8ca8-bcf6f6d106ed",
     "tier": "growth",
-    "listeners_at_seed": 639435
+    "listeners_at_seed": 639561
   },
   {
     "slug": "underscores",
@@ -757,7 +813,7 @@
     "lastfm_name": "underscores",
     "lastfm_mbid": "ab1a3f85-e0ea-470a-af5c-175447ae774c",
     "tier": "growth",
-    "listeners_at_seed": 628833
+    "listeners_at_seed": 629888
   },
   {
     "slug": "wizkid",
@@ -765,7 +821,15 @@
     "lastfm_name": "Wizkid",
     "lastfm_mbid": "efc5d365-a448-4e2f-9b5f-4a7c84be725c",
     "tier": "growth",
-    "listeners_at_seed": 625552
+    "listeners_at_seed": 625826
+  },
+  {
+    "slug": "rebzyyx",
+    "name": "Rebzyyx",
+    "lastfm_name": "Rebzyyx",
+    "lastfm_mbid": "b7dd0549-fedb-4a83-87e1-ed3b46a03372",
+    "tier": "growth",
+    "listeners_at_seed": 620714
   },
   {
     "slug": "glaive",
@@ -773,7 +837,7 @@
     "lastfm_name": "glaive",
     "lastfm_mbid": "fd36f43e-5bd1-488e-b844-0e059250ef78",
     "tier": "growth",
-    "listeners_at_seed": 618319
+    "listeners_at_seed": 618619
   },
   {
     "slug": "geese",
@@ -781,7 +845,7 @@
     "lastfm_name": "Geese",
     "lastfm_mbid": "16a8a6cc-57d9-4a13-9fb9-c87e359c5abe",
     "tier": "growth",
-    "listeners_at_seed": 607181
+    "listeners_at_seed": 607644
   },
   {
     "slug": "jane-remover",
@@ -789,7 +853,15 @@
     "lastfm_name": "Jane Remover",
     "lastfm_mbid": "f4b6e451-5dce-4842-a555-f793892299b3",
     "tier": "growth",
-    "listeners_at_seed": 605260
+    "listeners_at_seed": 605884
+  },
+  {
+    "slug": "elita",
+    "name": "Elita",
+    "lastfm_name": "Elita",
+    "lastfm_mbid": "5395dd45-ac7a-4761-87b2-e17593b126bf",
+    "tier": "growth",
+    "listeners_at_seed": 600505
   },
   {
     "slug": "laura-les",
@@ -797,15 +869,15 @@
     "lastfm_name": "laura les",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 594109
+    "listeners_at_seed": 594361
   },
   {
-    "slug": "sidney-gish",
-    "name": "Sidney Gish",
-    "lastfm_name": "Sidney Gish",
-    "lastfm_mbid": "9cfabb8c-24a3-498d-b383-bb5324cfe30f",
+    "slug": "glare",
+    "name": "Glare",
+    "lastfm_name": "Glare",
+    "lastfm_mbid": "6825e929-5564-4981-bb0a-85dc272e2de3",
     "tier": "growth",
-    "listeners_at_seed": 582496
+    "listeners_at_seed": 590241
   },
   {
     "slug": "venetian-snares",
@@ -813,7 +885,7 @@
     "lastfm_name": "Venetian Snares",
     "lastfm_mbid": "56abaa47-0101-463b-b37e-e961136fec39",
     "tier": "growth",
-    "listeners_at_seed": 577829
+    "listeners_at_seed": 577891
   },
   {
     "slug": "nemzzz",
@@ -821,7 +893,7 @@
     "lastfm_name": "Nemzzz",
     "lastfm_mbid": "d2a36c92-546b-4b81-b31b-23e21d2ea6ee",
     "tier": "growth",
-    "listeners_at_seed": 565374
+    "listeners_at_seed": 565678
   },
   {
     "slug": "jordan-adetunji",
@@ -829,15 +901,15 @@
     "lastfm_name": "Jordan Adetunji",
     "lastfm_mbid": "4587105d-7469-480a-9ed5-1513af9a91c9",
     "tier": "growth",
-    "listeners_at_seed": 560415
+    "listeners_at_seed": 560813
   },
   {
-    "slug": "my-head-is-empty",
-    "name": "my head is empty",
-    "lastfm_name": "my head is empty",
-    "lastfm_mbid": "eb878915-3057-4452-9d14-ab9124795f69",
+    "slug": "mass-of-the-fermenting-dregs",
+    "name": "MASS OF THE FERMENTING DREGS",
+    "lastfm_name": "MASS OF THE FERMENTING DREGS",
+    "lastfm_mbid": "1a19b0cd-fa9d-4363-b130-b3eb394cf373",
     "tier": "growth",
-    "listeners_at_seed": 554789
+    "listeners_at_seed": 558139
   },
   {
     "slug": "sewerslvt",
@@ -845,15 +917,15 @@
     "lastfm_name": "Sewerslvt",
     "lastfm_mbid": "33b1695b-0b35-4e22-b1d4-be4971fb71ba",
     "tier": "growth",
-    "listeners_at_seed": 552027
+    "listeners_at_seed": 552247
   },
   {
-    "slug": "eiafuawn",
-    "name": "Eiafuawn",
-    "lastfm_name": "Eiafuawn",
-    "lastfm_mbid": "2ed50780-960a-4e29-be29-485d9d9bb77d",
+    "slug": "chris-travis",
+    "name": "Chris Travis",
+    "lastfm_name": "Chris Travis",
+    "lastfm_mbid": "ba7c9491-4fac-440f-8684-ae6afb4f20a9",
     "tier": "growth",
-    "listeners_at_seed": 538756
+    "listeners_at_seed": 541852
   },
   {
     "slug": "aj-tracey",
@@ -861,15 +933,15 @@
     "lastfm_name": "AJ Tracey",
     "lastfm_mbid": "b8638bdc-728d-4d43-a908-7be7db29073b",
     "tier": "growth",
-    "listeners_at_seed": 525963
+    "listeners_at_seed": 526153
   },
   {
-    "slug": "headie-one",
-    "name": "Headie One",
-    "lastfm_name": "Headie One",
-    "lastfm_mbid": "2e2c71a6-1ac8-4442-ba00-c4dea71abd64",
+    "slug": "yandel",
+    "name": "Yandel",
+    "lastfm_name": "Yandel",
+    "lastfm_mbid": "3d291f48-a8be-4113-baad-c73618a7897d",
     "tier": "growth",
-    "listeners_at_seed": 516881
+    "listeners_at_seed": 517677
   },
   {
     "slug": "haarper",
@@ -877,7 +949,39 @@
     "lastfm_name": "HAARPER",
     "lastfm_mbid": "b698adb4-9805-4766-be66-623415b580d7",
     "tier": "growth",
-    "listeners_at_seed": 516857
+    "listeners_at_seed": 516956
+  },
+  {
+    "slug": "headie-one",
+    "name": "Headie One",
+    "lastfm_name": "Headie One",
+    "lastfm_mbid": "2e2c71a6-1ac8-4442-ba00-c4dea71abd64",
+    "tier": "growth",
+    "listeners_at_seed": 516954
+  },
+  {
+    "slug": "i-don-t-like-mirrors",
+    "name": "i don't like mirrors",
+    "lastfm_name": "i don't like mirrors",
+    "lastfm_mbid": "09f5a2b9-0ffa-4761-8244-925e56e1681f",
+    "tier": "growth",
+    "listeners_at_seed": 504878
+  },
+  {
+    "slug": "esthero",
+    "name": "Esthero",
+    "lastfm_name": "Esthero",
+    "lastfm_mbid": "681bf706-8664-4658-ab1a-39e1d385fae2",
+    "tier": "growth",
+    "listeners_at_seed": 501128
+  },
+  {
+    "slug": "aimer",
+    "name": "Aimer",
+    "lastfm_name": "Aimer",
+    "lastfm_mbid": "4a42053d-8b57-4341-a89d-d711ff4df7c8",
+    "tier": "growth",
+    "listeners_at_seed": 499937
   },
   {
     "slug": "quadeca",
@@ -885,23 +989,15 @@
     "lastfm_name": "Quadeca",
     "lastfm_mbid": "3a4024dc-cc62-4d9b-8bed-c22426136a52",
     "tier": "growth",
-    "listeners_at_seed": 499497
+    "listeners_at_seed": 499715
   },
   {
-    "slug": "j-hus",
-    "name": "J Hus",
-    "lastfm_name": "J Hus",
-    "lastfm_mbid": "eca85dd0-f1fb-4e83-8c47-61403f479254",
+    "slug": "puma-blue",
+    "name": "Puma Blue",
+    "lastfm_name": "Puma Blue",
+    "lastfm_mbid": "c4e929ed-f0d2-4794-a800-5f1495612164",
     "tier": "growth",
-    "listeners_at_seed": 488667
-  },
-  {
-    "slug": "dxrk",
-    "name": "Dxrk ダーク",
-    "lastfm_name": "Dxrk ダーク",
-    "lastfm_mbid": "4f433452-ad1e-4714-afb9-2ff3f014fd7c",
-    "tier": "growth",
-    "listeners_at_seed": 484825
+    "listeners_at_seed": 493537
   },
   {
     "slug": "horse-jumper-of-love",
@@ -909,7 +1005,7 @@
     "lastfm_name": "Horse Jumper of Love",
     "lastfm_mbid": "53477174-604a-4405-be1d-39a521bed5c1",
     "tier": "growth",
-    "listeners_at_seed": 483356
+    "listeners_at_seed": 483574
   },
   {
     "slug": "ninajirachi",
@@ -917,7 +1013,7 @@
     "lastfm_name": "Ninajirachi",
     "lastfm_mbid": "6897b46a-9236-4480-9ed7-300f6b85d62f",
     "tier": "growth",
-    "listeners_at_seed": 480603
+    "listeners_at_seed": 481428
   },
   {
     "slug": "night-tapes",
@@ -925,31 +1021,39 @@
     "lastfm_name": "Night Tapes",
     "lastfm_mbid": "46c38a79-24c0-4902-9c69-13c1ef1da408",
     "tier": "growth",
-    "listeners_at_seed": 477515
+    "listeners_at_seed": 478016
   },
   {
-    "slug": "carissa-s-wierd",
-    "name": "Carissa's Wierd",
-    "lastfm_name": "Carissa's Wierd",
-    "lastfm_mbid": null,
+    "slug": "eartheater",
+    "name": "Eartheater",
+    "lastfm_name": "Eartheater",
+    "lastfm_mbid": "08963034-7042-4542-b479-654e940a2988",
     "tier": "growth",
-    "listeners_at_seed": 468668
+    "listeners_at_seed": 463193
   },
   {
-    "slug": "goreshit",
-    "name": "goreshit",
-    "lastfm_name": "goreshit",
-    "lastfm_mbid": "eb0cf932-29f0-4e42-a866-2440b18dc182",
+    "slug": "elyotto",
+    "name": "ElyOtto",
+    "lastfm_name": "ElyOtto",
+    "lastfm_mbid": "c5b50d12-9a13-4a0a-bfab-a27e03b7c87f",
     "tier": "growth",
-    "listeners_at_seed": 428141
+    "listeners_at_seed": 462583
   },
   {
-    "slug": "werve",
-    "name": "$werve",
-    "lastfm_name": "$werve",
-    "lastfm_mbid": "e075b9f8-7917-4fa6-9d98-f66bb8c157d1",
+    "slug": "floetry",
+    "name": "Floetry",
+    "lastfm_name": "Floetry",
+    "lastfm_mbid": "bd74fb1e-9cc5-46d2-ac64-d44c358db201",
     "tier": "growth",
-    "listeners_at_seed": 421666
+    "listeners_at_seed": 432723
+  },
+  {
+    "slug": "skinshape",
+    "name": "Skinshape",
+    "lastfm_name": "Skinshape",
+    "lastfm_mbid": "848e0d89-4696-4c7b-a74c-a8e45292df6c",
+    "tier": "growth",
+    "listeners_at_seed": 430749
   },
   {
     "slug": "omah-lay",
@@ -957,15 +1061,31 @@
     "lastfm_name": "Omah Lay",
     "lastfm_mbid": "b63bd4fd-2050-4c92-a237-576f6f6c97cb",
     "tier": "growth",
-    "listeners_at_seed": 404954
+    "listeners_at_seed": 405209
   },
   {
-    "slug": "tommy-february6",
-    "name": "Tommy february6",
-    "lastfm_name": "Tommy february6",
+    "slug": "halcali",
+    "name": "HALCALI",
+    "lastfm_name": "HALCALI",
+    "lastfm_mbid": "8fbd27c9-f680-4dfb-b752-90d5e988367c",
+    "tier": "growth",
+    "listeners_at_seed": 402933
+  },
+  {
+    "slug": "tokyo-tea-room",
+    "name": "Tokyo Tea Room",
+    "lastfm_name": "Tokyo Tea Room",
+    "lastfm_mbid": "f836a8dd-6b20-4d95-9e0f-5b758ff3eeb3",
+    "tier": "growth",
+    "listeners_at_seed": 402248
+  },
+  {
+    "slug": "alison-s-halo",
+    "name": "Alison's Halo",
+    "lastfm_name": "Alison's Halo",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 396429
+    "listeners_at_seed": 399001
   },
   {
     "slug": "kslv-noh",
@@ -973,7 +1093,7 @@
     "lastfm_name": "KSLV Noh",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 395726
+    "listeners_at_seed": 395806
   },
   {
     "slug": "jme",
@@ -981,7 +1101,7 @@
     "lastfm_name": "JME",
     "lastfm_mbid": "27d1aa82-21c1-4bfa-b06e-eb821574d0c5",
     "tier": "growth",
-    "listeners_at_seed": 395591
+    "listeners_at_seed": 395695
   },
   {
     "slug": "smerz",
@@ -989,7 +1109,7 @@
     "lastfm_name": "SMERZ",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 393630
+    "listeners_at_seed": 393993
   },
   {
     "slug": "playaphonk",
@@ -997,7 +1117,7 @@
     "lastfm_name": "PlayaPhonk",
     "lastfm_mbid": "8b8739df-cda6-4b61-b3b7-7c8ce854fda4",
     "tier": "growth",
-    "listeners_at_seed": 392521
+    "listeners_at_seed": 392598
   },
   {
     "slug": "ishowspeed",
@@ -1005,15 +1125,7 @@
     "lastfm_name": "IShowSpeed",
     "lastfm_mbid": "d7defc5c-2869-40f0-9d56-2a0292aaeba5",
     "tier": "growth",
-    "listeners_at_seed": 389685
-  },
-  {
-    "slug": "hot-mulligan",
-    "name": "Hot Mulligan",
-    "lastfm_name": "Hot Mulligan",
-    "lastfm_mbid": "12a9e259-f7cb-4fca-87b1-a6c5fd38c300",
-    "tier": "growth",
-    "listeners_at_seed": 387644
+    "listeners_at_seed": 390081
   },
   {
     "slug": "fireboy-dml",
@@ -1021,15 +1133,15 @@
     "lastfm_name": "Fireboy DML",
     "lastfm_mbid": "4d09a017-4e09-47a7-b274-a7e0767ac4e0",
     "tier": "growth",
-    "listeners_at_seed": 381647
+    "listeners_at_seed": 381752
   },
   {
-    "slug": "ayra-starr",
-    "name": "Ayra Starr",
-    "lastfm_name": "Ayra Starr",
-    "lastfm_mbid": "c4ac4b97-2eac-46f6-85ae-f916c93847e4",
+    "slug": "free-throw",
+    "name": "Free Throw",
+    "lastfm_name": "Free Throw",
+    "lastfm_mbid": "1ca441fa-7cea-4f29-939b-06d8741f74c7",
     "tier": "growth",
-    "listeners_at_seed": 378776
+    "listeners_at_seed": 379664
   },
   {
     "slug": "shy-fx",
@@ -1037,7 +1149,7 @@
     "lastfm_name": "Shy FX",
     "lastfm_mbid": "ee459bd7-9768-4cc2-9452-a09700c4aeaa",
     "tier": "growth",
-    "listeners_at_seed": 370817
+    "listeners_at_seed": 370911
   },
   {
     "slug": "tokyopill",
@@ -1045,7 +1157,7 @@
     "lastfm_name": "TOKYOPILL",
     "lastfm_mbid": "21e4bf05-8bc9-4fea-a3ab-25631c2951e4",
     "tier": "growth",
-    "listeners_at_seed": 367055
+    "listeners_at_seed": 367131
   },
   {
     "slug": "frost-children",
@@ -1053,15 +1165,15 @@
     "lastfm_name": "Frost Children",
     "lastfm_mbid": "3f1ed758-50e4-401f-8dc6-e0066e546e7c",
     "tier": "growth",
-    "listeners_at_seed": 364694
+    "listeners_at_seed": 365658
   },
   {
-    "slug": "rory-in-early-20s",
-    "name": "Rory in early 20s",
-    "lastfm_name": "Rory in early 20s",
-    "lastfm_mbid": "82e6c1f9-7f5c-4680-a6ae-262e9f0ceee0",
+    "slug": "kelsey-lu",
+    "name": "Kelsey Lu",
+    "lastfm_name": "Kelsey Lu",
+    "lastfm_mbid": "b5970f40-4de3-43fc-9dad-e9b160b3db04",
     "tier": "growth",
-    "listeners_at_seed": 361157
+    "listeners_at_seed": 362076
   },
   {
     "slug": "marietta",
@@ -1069,7 +1181,7 @@
     "lastfm_name": "Marietta",
     "lastfm_mbid": "8c3ecdb6-21d9-4fd2-960c-014bef8d5658",
     "tier": "growth",
-    "listeners_at_seed": 355369
+    "listeners_at_seed": 355566
   },
   {
     "slug": "ghostface-playa",
@@ -1077,15 +1189,7 @@
     "lastfm_name": "Ghostface Playa",
     "lastfm_mbid": "cefa4700-266f-443a-bf9d-3ba735184570",
     "tier": "growth",
-    "listeners_at_seed": 355152
-  },
-  {
-    "slug": "asake",
-    "name": "Asake",
-    "lastfm_name": "Asake",
-    "lastfm_mbid": "2b37ba5e-2162-46ca-bbad-f076f6a333bd",
-    "tier": "growth",
-    "listeners_at_seed": 354099
+    "listeners_at_seed": 355211
   },
   {
     "slug": "cookiee-kawaii",
@@ -1093,7 +1197,7 @@
     "lastfm_name": "Cookiee Kawaii",
     "lastfm_mbid": "00f6b815-8ee6-4c23-b157-18fe3506a186",
     "tier": "growth",
-    "listeners_at_seed": 353874
+    "listeners_at_seed": 353938
   },
   {
     "slug": "skaiwater",
@@ -1101,7 +1205,7 @@
     "lastfm_name": "skaiwater",
     "lastfm_mbid": "43810b53-144a-4f6a-925e-66987a10b098",
     "tier": "growth",
-    "listeners_at_seed": 349420
+    "listeners_at_seed": 349534
   },
   {
     "slug": "origami-angel",
@@ -1109,7 +1213,7 @@
     "lastfm_name": "Origami Angel",
     "lastfm_mbid": "efb2b5ce-8a50-4857-826d-c25d7e8941ba",
     "tier": "growth",
-    "listeners_at_seed": 347310
+    "listeners_at_seed": 347441
   },
   {
     "slug": "genesis-owusu",
@@ -1117,7 +1221,7 @@
     "lastfm_name": "Genesis Owusu",
     "lastfm_mbid": "632258cb-4ab5-4f2d-be29-bcc641a275eb",
     "tier": "growth",
-    "listeners_at_seed": 343969
+    "listeners_at_seed": 344499
   },
   {
     "slug": "goldie",
@@ -1125,23 +1229,23 @@
     "lastfm_name": "Goldie",
     "lastfm_mbid": "c5393047-0c44-48eb-b5a8-070759f04371",
     "tier": "growth",
-    "listeners_at_seed": 330624
+    "listeners_at_seed": 330691
   },
   {
-    "slug": "ceechynaa",
-    "name": "Ceechynaa",
-    "lastfm_name": "Ceechynaa",
-    "lastfm_mbid": "b3e2669b-7dd6-4ce8-8ad4-46959bb6c21c",
+    "slug": "vertigoaway",
+    "name": "Vertigoaway",
+    "lastfm_name": "Vertigoaway",
+    "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 326335
+    "listeners_at_seed": 330666
   },
   {
-    "slug": "artist-3b615bbb",
-    "name": "宇多田ヒカル",
-    "lastfm_name": "宇多田ヒカル",
-    "lastfm_mbid": "b539e453-c4fe-47e3-8a07-8517eac74429",
+    "slug": "russ-millions",
+    "name": "Russ Millions",
+    "lastfm_name": "Russ Millions",
+    "lastfm_mbid": "176271d4-4465-46ba-bb87-c01e22ebe3a1",
     "tier": "growth",
-    "listeners_at_seed": 324673
+    "listeners_at_seed": 314541
   },
   {
     "slug": "ojerime",
@@ -1149,7 +1253,7 @@
     "lastfm_name": "Ojerime",
     "lastfm_mbid": "cfea5a42-b625-40ee-af35-05d78c684d03",
     "tier": "growth",
-    "listeners_at_seed": 307586
+    "listeners_at_seed": 307621
   },
   {
     "slug": "duki",
@@ -1157,7 +1261,7 @@
     "lastfm_name": "Duki",
     "lastfm_mbid": "44869536-0262-4f22-9c23-b4821c13cd97",
     "tier": "growth",
-    "listeners_at_seed": 306629
+    "listeners_at_seed": 306730
   },
   {
     "slug": "davido",
@@ -1165,7 +1269,7 @@
     "lastfm_name": "Davido",
     "lastfm_mbid": "a9ae7d4b-10f0-4da8-8b8c-21722a074a54",
     "tier": "growth",
-    "listeners_at_seed": 305480
+    "listeners_at_seed": 305782
   },
   {
     "slug": "everyone-asked-about-you",
@@ -1173,7 +1277,15 @@
     "lastfm_name": "Everyone Asked About You",
     "lastfm_mbid": "3a05d825-813a-4a00-8b4d-bebfbb0a3241",
     "tier": "growth",
-    "listeners_at_seed": 301931
+    "listeners_at_seed": 302357
+  },
+  {
+    "slug": "dj-zinc",
+    "name": "DJ Zinc",
+    "lastfm_name": "DJ Zinc",
+    "lastfm_mbid": "174d9bdb-4e9c-4c42-8e6a-a29db39bdda5",
+    "tier": "growth",
+    "listeners_at_seed": 297409
   },
   {
     "slug": "mineral",
@@ -1181,7 +1293,7 @@
     "lastfm_name": "Mineral",
     "lastfm_mbid": "b12a70be-abea-4c27-9e99-201841a0da6b",
     "tier": "growth",
-    "listeners_at_seed": 294644
+    "listeners_at_seed": 294790
   },
   {
     "slug": "igorrr",
@@ -1189,7 +1301,7 @@
     "lastfm_name": "Igorrr",
     "lastfm_mbid": "aec46991-e896-4c1f-80cc-aed97b0cdc73",
     "tier": "growth",
-    "listeners_at_seed": 288306
+    "listeners_at_seed": 288362
   },
   {
     "slug": "victony",
@@ -1197,15 +1309,7 @@
     "lastfm_name": "Victony",
     "lastfm_mbid": "7013c772-2236-42f3-8590-2e2292d2ca5e",
     "tier": "growth",
-    "listeners_at_seed": 288016
-  },
-  {
-    "slug": "cash-cobain",
-    "name": "Cash Cobain",
-    "lastfm_name": "Cash Cobain",
-    "lastfm_mbid": "4f57372b-2054-4722-a534-a99ab2598120",
-    "tier": "growth",
-    "listeners_at_seed": 283754
+    "listeners_at_seed": 288262
   },
   {
     "slug": "blessd",
@@ -1213,7 +1317,23 @@
     "lastfm_name": "Blessd",
     "lastfm_mbid": "d6450b43-baab-4406-8f77-d4c6abb803c1",
     "tier": "growth",
-    "listeners_at_seed": 282442
+    "listeners_at_seed": 282633
+  },
+  {
+    "slug": "spellling",
+    "name": "SPELLLING",
+    "lastfm_name": "SPELLLING",
+    "lastfm_mbid": "25521b37-fcf4-4204-8dca-e28bcda1e004",
+    "tier": "growth",
+    "listeners_at_seed": 262912
+  },
+  {
+    "slug": "saya-gray",
+    "name": "Saya Gray",
+    "lastfm_name": "Saya Gray",
+    "lastfm_mbid": "b949a783-214b-429d-a184-4e75c0f8be9c",
+    "tier": "growth",
+    "listeners_at_seed": 250031
   },
   {
     "slug": "your-arms-are-my-cocoon",
@@ -1221,7 +1341,7 @@
     "lastfm_name": "Your Arms Are My Cocoon",
     "lastfm_mbid": "d61394f7-3b8a-4171-8cd9-2f73a74e18b9",
     "tier": "growth",
-    "listeners_at_seed": 241759
+    "listeners_at_seed": 242068
   },
   {
     "slug": "horsegiirl",
@@ -1229,15 +1349,7 @@
     "lastfm_name": "horsegiirL",
     "lastfm_mbid": "de6a52b1-4f04-4c29-b471-345c06b93ac2",
     "tier": "growth",
-    "listeners_at_seed": 236842
-  },
-  {
-    "slug": "unknown-t",
-    "name": "Unknown T",
-    "lastfm_name": "Unknown T",
-    "lastfm_mbid": "a688dc7a-c743-4ec2-9355-c3dcdb30bf0e",
-    "tier": "growth",
-    "listeners_at_seed": 229383
+    "listeners_at_seed": 237148
   },
   {
     "slug": "nero-s-day-at-disneyland",
@@ -1245,7 +1357,7 @@
     "lastfm_name": "Nero's Day at Disneyland",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 215390
+    "listeners_at_seed": 215520
   },
   {
     "slug": "winona-oak",
@@ -1253,7 +1365,7 @@
     "lastfm_name": "Winona Oak",
     "lastfm_mbid": "6ceb21f1-fb1a-4c03-92dc-0ebc939dccb0",
     "tier": "growth",
-    "listeners_at_seed": 214502
+    "listeners_at_seed": 214551
   },
   {
     "slug": "brytiago",
@@ -1261,7 +1373,7 @@
     "lastfm_name": "Brytiago",
     "lastfm_mbid": "86e4ae25-f45b-4c52-904d-94c0004f907e",
     "tier": "growth",
-    "listeners_at_seed": 208427
+    "listeners_at_seed": 208516
   },
   {
     "slug": "res",
@@ -1269,7 +1381,7 @@
     "lastfm_name": "Res",
     "lastfm_mbid": "485f406b-900e-4528-8436-0013dfd107f7",
     "tier": "growth",
-    "listeners_at_seed": 205234
+    "listeners_at_seed": 205400
   },
   {
     "slug": "hkmori",
@@ -1277,23 +1389,23 @@
     "lastfm_name": "hkmori",
     "lastfm_mbid": "f9199458-ef27-4614-9ba9-ba12d36cb588",
     "tier": "growth",
-    "listeners_at_seed": 203968
+    "listeners_at_seed": 204107
   },
   {
-    "slug": "trim",
-    "name": "Trim",
-    "lastfm_name": "Trim",
-    "lastfm_mbid": "2151818d-8cf9-4c0f-b992-ffde4bf711ac",
+    "slug": "empire-empire-i-was-a-lonely-estate",
+    "name": "Empire! Empire! (I Was a Lonely Estate)",
+    "lastfm_name": "Empire! Empire! (I Was a Lonely Estate)",
+    "lastfm_mbid": "092da447-423a-4147-ab49-34e91554997e",
     "tier": "growth",
-    "listeners_at_seed": 198244
+    "listeners_at_seed": 196870
   },
   {
-    "slug": "lxst-cxntury",
-    "name": "LXST CXNTURY",
-    "lastfm_name": "LXST CXNTURY",
-    "lastfm_mbid": "0962da30-63ce-4b42-a71a-c31e897bcf9f",
+    "slug": "michael-cera-palin",
+    "name": "Michael Cera Palin",
+    "lastfm_name": "Michael Cera Palin",
+    "lastfm_mbid": "0acc305d-e58b-4e76-bc17-630345c14b38",
     "tier": "growth",
-    "listeners_at_seed": 195896
+    "listeners_at_seed": 193547
   },
   {
     "slug": "origin-unknown",
@@ -1301,23 +1413,15 @@
     "lastfm_name": "Origin Unknown",
     "lastfm_mbid": "b5525d77-93e5-4562-b575-8d39d7765245",
     "tier": "growth",
-    "listeners_at_seed": 186551
+    "listeners_at_seed": 186599
   },
   {
-    "slug": "m-beat",
-    "name": "M-Beat",
-    "lastfm_name": "M-Beat",
-    "lastfm_mbid": "3f8b8277-59e3-4a77-a574-245a3043a5d0",
+    "slug": "andy-c",
+    "name": "Andy C",
+    "lastfm_name": "Andy C",
+    "lastfm_mbid": "ec853694-30a1-4c7e-84e6-4ca87ee3c314",
     "tier": "growth",
-    "listeners_at_seed": 178885
-  },
-  {
-    "slug": "ziahfyah",
-    "name": "Ziahfyah",
-    "lastfm_name": "Ziahfyah",
-    "lastfm_mbid": null,
-    "tier": "growth",
-    "listeners_at_seed": 174783
+    "listeners_at_seed": 180287
   },
   {
     "slug": "sky-rompiendo",
@@ -1325,31 +1429,39 @@
     "lastfm_name": "Sky Rompiendo",
     "lastfm_mbid": "bfbd3940-14aa-4c4a-a2ab-67d040aae0f2",
     "tier": "growth",
-    "listeners_at_seed": 170141
+    "listeners_at_seed": 170207
   },
   {
-    "slug": "tram",
-    "name": "Tram",
-    "lastfm_name": "Tram",
-    "lastfm_mbid": "353b65fe-2850-45a9-8c20-df2f39d3346c",
+    "slug": "acetone",
+    "name": "Acetone",
+    "lastfm_name": "Acetone",
+    "lastfm_mbid": "56583c57-ca4c-4888-bbd6-008eebb03c0f",
     "tier": "growth",
-    "listeners_at_seed": 155847
+    "listeners_at_seed": 154950
   },
   {
-    "slug": "wonder",
-    "name": "Wonder",
-    "lastfm_name": "Wonder",
-    "lastfm_mbid": "fb4091f8-0ff4-4f3a-a5f6-08e217a3517d",
+    "slug": "mr-eazi",
+    "name": "Mr Eazi",
+    "lastfm_name": "Mr Eazi",
+    "lastfm_mbid": "72adb13a-800e-44b5-9aef-5c7d8cb6a2d7",
     "tier": "growth",
-    "listeners_at_seed": 154918
+    "listeners_at_seed": 153589
   },
   {
-    "slug": "ysy-a",
-    "name": "Ysy A",
-    "lastfm_name": "Ysy A",
+    "slug": "dj-smokey",
+    "name": "DJ Smokey",
+    "lastfm_name": "DJ Smokey",
+    "lastfm_mbid": "c0552907-02cd-4409-b519-d9dc78c50581",
+    "tier": "growth",
+    "listeners_at_seed": 153345
+  },
+  {
+    "slug": "devilish-trio",
+    "name": "DEVILISH TRIO",
+    "lastfm_name": "DEVILISH TRIO",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 153808
+    "listeners_at_seed": 151059
   },
   {
     "slug": "dm-dokuro",
@@ -1357,15 +1469,23 @@
     "lastfm_name": "DM DOKURO",
     "lastfm_mbid": "6f4e8294-49b8-4ae8-91b5-cb9d644e90ff",
     "tier": "growth",
-    "listeners_at_seed": 146818
+    "listeners_at_seed": 146967
   },
   {
-    "slug": "k-trap",
-    "name": "K-Trap",
-    "lastfm_name": "K-Trap",
-    "lastfm_mbid": null,
+    "slug": "ida",
+    "name": "Ida",
+    "lastfm_name": "Ida",
+    "lastfm_mbid": "19c960a1-703e-48e4-8286-37b3aee7a09c",
     "tier": "growth",
-    "listeners_at_seed": 136592
+    "listeners_at_seed": 139180
+  },
+  {
+    "slug": "r-u-s-s-e-l-b-u-c-k",
+    "name": "r u s s e l b u c k",
+    "lastfm_name": "r u s s e l b u c k",
+    "lastfm_mbid": "9d2c84b7-cb14-4310-b34e-ed70460dc577",
+    "tier": "growth",
+    "listeners_at_seed": 133547
   },
   {
     "slug": "lido",
@@ -1373,7 +1493,7 @@
     "lastfm_name": "Lido",
     "lastfm_mbid": "f2e33434-ec54-4983-a05b-5b15cb3a3a49",
     "tier": "growth",
-    "listeners_at_seed": 130281
+    "listeners_at_seed": 130289
   },
   {
     "slug": "jejune",
@@ -1381,7 +1501,15 @@
     "lastfm_name": "Jejune",
     "lastfm_mbid": "6fb1e6e6-07ab-434d-8e4c-5b8df0f92cac",
     "tier": "growth",
-    "listeners_at_seed": 124192
+    "listeners_at_seed": 124325
+  },
+  {
+    "slug": "sabi",
+    "name": "Sabi",
+    "lastfm_name": "Sabi",
+    "lastfm_mbid": "d6b9bc68-dcf7-4ec1-8416-a7f046e9354c",
+    "tier": "growth",
+    "listeners_at_seed": 121007
   },
   {
     "slug": "congo-natty",
@@ -1389,7 +1517,7 @@
     "lastfm_name": "Congo Natty",
     "lastfm_mbid": "26ef2dac-1644-4757-91c6-ae04cb5faba3",
     "tier": "growth",
-    "listeners_at_seed": 117750
+    "listeners_at_seed": 117784
   },
   {
     "slug": "karma-fields",
@@ -1397,15 +1525,7 @@
     "lastfm_name": "Karma Fields",
     "lastfm_mbid": "f4bd4c06-f98f-4f8d-8539-61e8c1721af1",
     "tier": "growth",
-    "listeners_at_seed": 113769
-  },
-  {
-    "slug": "special-request",
-    "name": "Special Request",
-    "lastfm_name": "Special Request",
-    "lastfm_mbid": "761418b2-8bfe-4118-9fed-6b8850a56e51",
-    "tier": "growth",
-    "listeners_at_seed": 112943
+    "listeners_at_seed": 113796
   },
   {
     "slug": "strictly-ballroom",
@@ -1413,7 +1533,7 @@
     "lastfm_name": "Strictly Ballroom",
     "lastfm_mbid": "e6d07262-8607-42e0-bad1-249c828b8593",
     "tier": "growth",
-    "listeners_at_seed": 110161
+    "listeners_at_seed": 110287
   },
   {
     "slug": "first-day-back",
@@ -1421,15 +1541,7 @@
     "lastfm_name": "First Day Back",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 108595
-  },
-  {
-    "slug": "team-mekano",
-    "name": "Team Mekano",
-    "lastfm_name": "Team Mekano",
-    "lastfm_mbid": "afc35b58-ee03-43d6-92c7-fdd26c69cb37",
-    "tier": "growth",
-    "listeners_at_seed": 101605
+    "listeners_at_seed": 108884
   },
   {
     "slug": "loski",
@@ -1437,15 +1549,7 @@
     "lastfm_name": "Loski",
     "lastfm_mbid": "ba15cb04-ec8f-4ae7-b761-5477d063a69c",
     "tier": "growth",
-    "listeners_at_seed": 98326
-  },
-  {
-    "slug": "ofb",
-    "name": "OFB",
-    "lastfm_name": "OFB",
-    "lastfm_mbid": "3aac8aa7-e604-471f-ae4c-1d50c3f2b92e",
-    "tier": "growth",
-    "listeners_at_seed": 92447
+    "listeners_at_seed": 98380
   },
   {
     "slug": "penfold",
@@ -1453,31 +1557,7 @@
     "lastfm_name": "Penfold",
     "lastfm_mbid": "0285eca9-08bf-470e-be93-4e14384b2e60",
     "tier": "growth",
-    "listeners_at_seed": 88735
-  },
-  {
-    "slug": "noriel",
-    "name": "Noriel",
-    "lastfm_name": "Noriel",
-    "lastfm_mbid": "cd277e93-dbc4-4565-be57-44264413f28b",
-    "tier": "growth",
-    "listeners_at_seed": 72323
-  },
-  {
-    "slug": "sus",
-    "name": "Sus",
-    "lastfm_name": "Sus",
-    "lastfm_mbid": "879007c7-34f5-44f3-a56e-fbd362ce95f0",
-    "tier": "growth",
-    "listeners_at_seed": 64682
-  },
-  {
-    "slug": "joe-dwet-file",
-    "name": "Joé Dwèt Filé",
-    "lastfm_name": "Joé Dwèt Filé",
-    "lastfm_mbid": null,
-    "tier": "growth",
-    "listeners_at_seed": 63371
+    "listeners_at_seed": 88782
   },
   {
     "slug": "maniken05",
@@ -1485,39 +1565,15 @@
     "lastfm_name": "maniken05",
     "lastfm_mbid": "a22fc515-e1bb-4e28-b673-339d0a20341a",
     "tier": "growth",
-    "listeners_at_seed": 62925
+    "listeners_at_seed": 63065
   },
   {
-    "slug": "seven-kayne",
-    "name": "Seven Kayne",
-    "lastfm_name": "Seven Kayne",
-    "lastfm_mbid": "27f5296b-4692-4732-a0c2-d0f25107779f",
+    "slug": "tom-jerry",
+    "name": "Tom & Jerry",
+    "lastfm_name": "Tom & Jerry",
+    "lastfm_mbid": "d018cc6c-eeb1-4881-b46f-e3ee6497712f",
     "tier": "growth",
-    "listeners_at_seed": 59930
-  },
-  {
-    "slug": "uniiqu3",
-    "name": "UNiiQU3",
-    "lastfm_name": "UNiiQU3",
-    "lastfm_mbid": null,
-    "tier": "growth",
-    "listeners_at_seed": 59214
-  },
-  {
-    "slug": "uncle-waffles",
-    "name": "Uncle Waffles",
-    "lastfm_name": "Uncle Waffles",
-    "lastfm_mbid": "aec7779a-aa40-4b6e-8764-bd64b0500caf",
-    "tier": "growth",
-    "listeners_at_seed": 58082
-  },
-  {
-    "slug": "artist-6b9e0453",
-    "name": "米津玄師",
-    "lastfm_name": "米津玄師",
-    "lastfm_mbid": "09d4a85c-4916-4b4e-bc96-c4cfcf371046",
-    "tier": "growth",
-    "listeners_at_seed": 57677
+    "listeners_at_seed": 62035
   },
   {
     "slug": "wondha-mountain",
@@ -1525,39 +1581,7 @@
     "lastfm_name": "Wondha Mountain",
     "lastfm_mbid": "d8e95aae-37fa-4e41-92ea-44742ac1851e",
     "tier": "growth",
-    "listeners_at_seed": 46664
-  },
-  {
-    "slug": "dbn-gogo",
-    "name": "DBN Gogo",
-    "lastfm_name": "DBN Gogo",
-    "lastfm_mbid": "d03f4725-ee09-4958-a91f-66f9579772c1",
-    "tier": "growth",
-    "listeners_at_seed": 45771
-  },
-  {
-    "slug": "artist-c300c342",
-    "name": "杏里",
-    "lastfm_name": "杏里",
-    "lastfm_mbid": "2e178faf-fbe6-44b3-8339-1b13e8ecc754",
-    "tier": "growth",
-    "listeners_at_seed": 43268
-  },
-  {
-    "slug": "gonzalo-genek",
-    "name": "Gonzalo Genek",
-    "lastfm_name": "Gonzalo Genek",
-    "lastfm_mbid": "f534e07a-e620-488e-a925-c7d22ca318b3",
-    "tier": "growth",
-    "listeners_at_seed": 41408
-  },
-  {
-    "slug": "kabza-de-small",
-    "name": "Kabza De Small",
-    "lastfm_name": "Kabza De Small",
-    "lastfm_mbid": "36f9accc-d9f6-4dd2-8c23-91da477ce35c",
-    "tier": "growth",
-    "listeners_at_seed": 37321
+    "listeners_at_seed": 46689
   },
   {
     "slug": "dj-maphorisa",
@@ -1565,31 +1589,7 @@
     "lastfm_name": "Dj Maphorisa",
     "lastfm_mbid": null,
     "tier": "growth",
-    "listeners_at_seed": 37168
-  },
-  {
-    "slug": "abhir",
-    "name": "Abhir",
-    "lastfm_name": "Abhir",
-    "lastfm_mbid": null,
-    "tier": "growth",
-    "listeners_at_seed": 32526
-  },
-  {
-    "slug": "franky-style",
-    "name": "Franky Style",
-    "lastfm_name": "Franky Style",
-    "lastfm_mbid": "8c116123-5d68-4dd4-823b-4bec4a293780",
-    "tier": "growth",
-    "listeners_at_seed": 29574
-  },
-  {
-    "slug": "oney1",
-    "name": "Oney1",
-    "lastfm_name": "Oney1",
-    "lastfm_mbid": "32231a38-05c0-4f44-93a2-f5dc9c560738",
-    "tier": "growth",
-    "listeners_at_seed": 26612
+    "listeners_at_seed": 37188
   },
   {
     "slug": "midoca",
@@ -1597,6 +1597,6 @@
     "lastfm_name": "Midoca",
     "lastfm_mbid": "d2195bb3-8c40-41e9-8359-4131f5ce2f41",
     "tier": "growth",
-    "listeners_at_seed": 24500
+    "listeners_at_seed": 24502
   }
 ]
