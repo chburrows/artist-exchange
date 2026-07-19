@@ -31,7 +31,7 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 ## Progress
 
 - [x] **Phase 0** — Hygiene, project docs, CI skeleton
-- [~] **Phase 1** — Schema, snapshotter — *code complete and verified locally; awaiting Railway deploy*
+- [~] **Phase 1** — Schema, snapshotter — *deployed to Railway 2026-07-19; awaiting unattended cron confirmation (see "Confirming the cron" below)*
 - [ ] **Phase 2** — Pure core + invariant tests
 - [ ] **Phase 3** — Index + reversion on real data
 - [ ] **Phase 4** — Auth, trading, portfolio API
@@ -112,6 +112,27 @@ Decisions and surprises worth carrying forward:
 - **`price_history` took a surrogate key instead of `(artist_id, at)`**, the one deliberate departure from the data model above. Both the collision and the ordering-inversion behind that decision were reproduced against a live database — see "Why `price_history` has a surrogate key".
 
 Deferred to Phase 4, where the trading semantics are settled: the `v_balances` / `v_positions` views. The tables they read from exist; the views do not yet.
+
+### Deploy notes (Railway, 2026-07-19)
+
+Three things were wrong in a way that only surfaces at deploy time, all now fixed:
+
+- **`releaseCommand` is Heroku, not Railway.** Verified against `railway.schema.json`; the correct key is `preDeployCommand`. Railway ignores unknown keys silently, so `alembic upgrade head` would never have run — and because `/health` deliberately does not touch the database, the service would have looked healthy while every real query failed against an empty schema.
+- **Railway emits `DATABASE_URL` as `postgresql://`**, which SQLAlchemy resolves to psycopg2. This project uses psycopg 3, so the raw variable crashed the API on boot. Normalized in `settings.py` so the Railway variable can be referenced directly rather than hand-copied.
+- **`railway.json` lives at `services/api/railway.json`, not the repo root.** The Docker build context must be the repo root (that is where `uv.lock` and `alembic.ini` are), so the service's Root Directory is `/` — which means Railway does *not* find the config automatically. The service's config-as-code path must be set explicitly, or the equivalent fields set in the dashboard.
+
+A 502 on `/health` is a routing problem, never a database one: the endpoint answers 200 with a completely unreachable `DATABASE_URL`. Check the port before anything else.
+
+### Confirming the cron
+
+The nightly Action fires at **07:00 UTC**. Because `as_of_date` is the UTC date at fire time, a manual run earlier on the same UTC day means the scheduled run **upserts that same date** rather than adding one — the row count stays flat, which is idempotency working, not a failure.
+
+So the check is *not* "row count doubled". It is:
+
+1. `gh run list --workflow=nightly-snapshot.yml` shows a run whose trigger is `schedule`, not `workflow_dispatch`.
+2. `SELECT as_of_date, count(*), max(fetched_at) ... GROUP BY as_of_date` shows `max(fetched_at)` at ~07:00 UTC.
+
+A genuinely new `as_of_date` appears only after a UTC day with no manual run — for this deploy, the *second* night.
 
 ---
 
