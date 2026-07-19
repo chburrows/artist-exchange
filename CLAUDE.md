@@ -77,6 +77,7 @@ These are rules, not preferences. Violating one is a bug even if tests pass.
 6. **Rounding always favors the market.** Buys round up, sells round down. Every round trip must be strictly lossy.
 7. **Job endpoints are idempotent** on `(artist_id, as_of_date)`. Re-running a job must never double-write or append a ledger row.
 8. **Balances and positions are derived from the ledger.** `v_balances` / `v_positions` are the definition of truth; `balance_cache` / `position_cache` are written in the *same DB transaction* as the ledger append, under `SELECT ... FOR UPDATE` on the artist row. Never update a cache independently.
+9. **Never timestamp an event inside a locked transaction with `now()`.** Use `clock_timestamp()`. `now()` is frozen at transaction start, so under lock contention it records queue time, not execution time — see Gotchas.
 
 ## Gotchas
 
@@ -92,6 +93,7 @@ These are rules, not preferences. Violating one is a bug even if tests pass.
 - **Column types come from `type_annotation_map` in `db/base.py`, not per-column annotations.** `Mapped[datetime | None]` silently ignores an `Annotated` alias, which once produced seven naive timestamp columns including the glide window. Add schema-wide type defaults there, never a per-column alias you have to remember.
 - **httpx logs full request URLs at INFO, and ours carry `api_key`.** `logging_config.py` exists only to suppress that. Call `configure_third_party_logging()` in any new entry point, or the Last.fm key lands in production logs.
 - **`ax snapshot` hits the live API and spends rate-limit budget.** Use `--limit` when smoke-testing; a full run is ~200 requests over ~52s.
+- **Postgres `now()` is transaction-*start* time, not statement time.** Combined with `SELECT ... FOR UPDATE`, it records when a trade *queued* rather than when it executed — which can invert the order of rows in a price series. Use `clock_timestamp()` for anything that timestamps an event inside a locked transaction. This is why `price_history` has a surrogate `id` key instead of `(artist_id, at)`; see PLAN.md and `tests/test_price_history_schema.py`.
 
 ## Conventions
 

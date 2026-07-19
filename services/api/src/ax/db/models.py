@@ -171,7 +171,30 @@ class IndexSnapshot(Base):
 
 
 class PriceHistory(Base):
-    """Append-only market price series, one row per price-moving event."""
+    """Append-only market price series, one row per price-moving event.
+
+    PLAN.md specified `PK (artist_id, at)`. That is deliberately *not* what
+    this is, because a timestamp cannot safely be part of an identity here:
+
+    1. Two price-moving events for one artist at the same instant would
+       violate the key, rejecting a user's trade for a reason unrelated to
+       their trade. The `SELECT ... FOR UPDATE` artist lock does not
+       prevent it — see (2).
+    2. Postgres `now()` is *transaction start* time, not statement time,
+       and the row lock is acquired after the transaction begins. So the
+       order transactions start and the order they execute can differ, and
+       two rows can be written with timestamps that invert their real
+       execution order. Reading `ORDER BY at` then yields a state sequence
+       that never happened — net_supply moving 2 -> 1 across two
+       consecutive buys.
+
+    A surrogate key makes collisions structurally impossible and leaves
+    `at` free to be purely descriptive. `id` also breaks ties in insertion
+    order, so `ORDER BY at, id` is stable even for genuinely simultaneous
+    events.
+
+    See the `at` column for the other half of the fix.
+    """
 
     __tablename__ = "price_history"
     __table_args__ = (
@@ -188,10 +211,16 @@ class PriceHistory(Base):
         Index("ix_price_history_artist_id_at", "artist_id", "at"),
     )
 
-    artist_id: Mapped[int] = mapped_column(
-        ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True
-    )
-    at: Mapped[datetime] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    artist_id: Mapped[int] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"))
+
+    # `clock_timestamp()`, NOT `now()`. `now()` is frozen at transaction
+    # start, so under lock contention it records when a trade *queued*
+    # rather than when it executed — which inverts the series order.
+    # `clock_timestamp()` reads the real clock at INSERT, after the lock.
+    # As a server default it is also the value you get by omitting the
+    # column, so the correct behavior is the one you get for free.
+    at: Mapped[datetime] = mapped_column(server_default=text("clock_timestamp()"))
 
     market_price_cents: Mapped[int]
     fair_value_cents: Mapped[int | None] = mapped_column(nullable=True)

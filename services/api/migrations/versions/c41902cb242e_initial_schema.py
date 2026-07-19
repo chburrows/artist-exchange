@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 16dd05bf91df
+Revision ID: c41902cb242e
 Revises:
-Create Date: 2026-07-18 17:52:33.145112
+Create Date: 2026-07-18 18:37:30.783484
 
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "16dd05bf91df"
+revision: str = "c41902cb242e"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -211,8 +211,14 @@ def upgrade() -> None:
     )
     op.create_table(
         "price_history",
+        sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column("artist_id", sa.BigInteger(), nullable=False),
-        sa.Column("at", sa.TIMESTAMP(timezone=True), nullable=False),
+        sa.Column(
+            "at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("clock_timestamp()"),
+            nullable=False,
+        ),
         sa.Column("market_price_cents", sa.BigInteger(), nullable=False),
         sa.Column("fair_value_cents", sa.BigInteger(), nullable=True),
         sa.Column("net_supply", sa.BigInteger(), nullable=False),
@@ -227,7 +233,7 @@ def upgrade() -> None:
             name=op.f("fk_price_history_artist_id_artists"),
             ondelete="CASCADE",
         ),
-        sa.PrimaryKeyConstraint("artist_id", "at", name=op.f("pk_price_history")),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_price_history")),
     )
     op.create_index(
         "ix_price_history_artist_id_at", "price_history", ["artist_id", "at"], unique=False

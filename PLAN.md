@@ -109,6 +109,7 @@ Decisions and surprises worth carrying forward:
 - **The seed generator must round-robin across genre tags.** Concatenating them looked equivalent but wasn't: resolution stops at the target count, so the first few tags filled the entire growth tier. The first run produced a "growth tier" of shoegaze, hyperpop and midwest emo with zero reggaeton, k-pop, grime or jungle.
 - **Artists named entirely in non-Latin scripts slugify to the empty string**, which collides on `artists.slug`. They fall back to a stable hash of the name.
 - **`alembic/env.py` must not overwrite an explicitly-supplied `sqlalchemy.url`.** It did, which meant the test harness migrated — and would have written to — the developer's real database.
+- **`price_history` took a surrogate key instead of `(artist_id, at)`**, the one deliberate departure from the data model above. Both the collision and the ordering-inversion behind that decision were reproduced against a live database — see "Why `price_history` has a surrogate key".
 
 Deferred to Phase 4, where the trading semantics are settled: the `v_balances` / `v_positions` views. The tables they read from exist; the views do not yet.
 
@@ -293,8 +294,10 @@ metric_snapshots(artist_id, as_of_date, source, metric_key, value bigint, fetche
 index_snapshots(artist_id, as_of_date, index_score float, fair_value_cents bigint,
                 components jsonb, PK (artist_id, as_of_date))
 
-price_history(artist_id, at, market_price_cents, fair_value_cents, net_supply,
-              source check in ('trade','reversion','listing'), PK (artist_id, at))
+-- surrogate PK, NOT (artist_id, at) — see "Why price_history has a surrogate key"
+price_history(id bigserial, artist_id, at default clock_timestamp(),
+              market_price_cents, fair_value_cents, net_supply,
+              source check in ('trade','reversion','listing'), PK (id))
 
 transactions(id bigserial, user_id, artist_id, kind check in ('GRANT','BUY','SELL','FEE'),
              cash_delta_cents bigint, share_delta bigint, exec_price_cents,
@@ -311,7 +314,33 @@ flagged_artists(artist_id, as_of_date, reason text, detail jsonb,
                 PK (artist_id, as_of_date))
 ```
 
-Indexes: `transactions(user_id, created_at)`, `transactions(artist_id, created_at)`, `price_history(artist_id, at DESC)`, `index_snapshots(as_of_date)`.
+Indexes: `transactions(user_id, created_at)`, `transactions(artist_id, created_at)`, `price_history(artist_id, at)`, `index_snapshots(as_of_date)`.
+
+The `price_history` index is plain ascending, not `at DESC`: Postgres scans a btree backwards at the same cost, and an explicit `DESC` makes it an expression index that autogenerate cannot compare — reporting drift from `alembic check` on every run forever.
+
+### Why `price_history` has a surrogate key
+
+This is the one place the schema deliberately departs from the design above, decided in Phase 1 and verified against a live database. `PK (artist_id, at)` is unsafe for two independent reasons.
+
+**A timestamp is not an identity.** Two price-moving events for one artist at the same instant violate the key, so a user's trade gets rejected for a reason that has nothing to do with their trade.
+
+**`now()` is transaction-start time, not statement time**, and the `SELECT ... FOR UPDATE` artist lock is acquired *after* the transaction begins. So the order transactions start and the order they execute can differ, and two rows can be written with timestamps that invert their real execution order:
+
+```
+A: BEGIN (now() pinned to T1)          ... slow to reach the lock
+B: BEGIN (now() pinned to T2, later)   ... reaches the lock first
+B: acquires lock, trades, writes at=T2
+A: acquires lock, trades, writes at=T1   <- executed second, timestamped first
+```
+
+Reproduced with two concurrent connections: reading `ORDER BY at` returned `net_supply` of **2 then 1** — supply decreasing across two consecutive buys, a state sequence that never happened. That series is what PriceChart plots, so the bug is directly visible in the signature UI.
+
+The fix is both halves together:
+
+1. **`id bigserial` primary key.** Collisions become structurally impossible, and `id` breaks ties in insertion order, so `ORDER BY at, id` is stable even for genuinely simultaneous events.
+2. **`at` defaults to `clock_timestamp()`**, which reads the real clock at INSERT, after the lock. As a *column default* it is also what you get by omitting the column — the correct behavior is the one you get for free, rather than a rule every future insert site has to remember.
+
+Locked in by `tests/test_price_history_schema.py`. **Never write `now()` into `price_history.at`** — it silently reintroduces both bugs.
 
 ### Deriving positions without being slow
 

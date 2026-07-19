@@ -30,6 +30,7 @@ from datetime import UTC, datetime
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.util.exc import CommandError
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
@@ -61,23 +62,54 @@ ADMIN_URL = _TEST_URL.set(database="postgres")
 TEST_JOB_TOKEN = "test-job-token"
 
 
-@pytest.fixture(scope="session")
-def engine() -> Iterator[Engine]:
-    """Create (if needed) and migrate the test database, once per session."""
+def _create_database_if_missing(drop_first: bool = False) -> None:
     admin = create_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
-    with admin.connect() as connection:
-        exists = connection.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :name"),
-            {"name": TEST_DB_NAME},
-        ).scalar()
-        if not exists:
-            connection.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
-    admin.dispose()
+    try:
+        with admin.connect() as connection:
+            if drop_first:
+                # Terminate stragglers first; DROP DATABASE fails while any
+                # session is still connected.
+                connection.execute(
+                    text(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                        "WHERE datname = :name AND pid <> pg_backend_pid()"
+                    ),
+                    {"name": TEST_DB_NAME},
+                )
+                connection.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}"'))
 
+            exists = connection.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                {"name": TEST_DB_NAME},
+            ).scalar()
+            if not exists:
+                connection.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
+    finally:
+        admin.dispose()
+
+
+def _alembic_config() -> Config:
     config = Config(os.path.join(REPO_ROOT, "alembic.ini"))
     config.set_main_option("script_location", os.path.join(REPO_ROOT, "services/api/migrations"))
     config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
-    command.upgrade(config, "head")
+    return config
+
+
+@pytest.fixture(scope="session")
+def engine() -> Iterator[Engine]:
+    """Create (if needed) and migrate the test database, once per session."""
+    _create_database_if_missing()
+
+    try:
+        command.upgrade(_alembic_config(), "head")
+    except CommandError:
+        # The test database is stamped with a revision that no longer
+        # exists — the normal result of regenerating a migration or
+        # switching branches. The test database holds nothing worth
+        # keeping, so rebuild it rather than making the developer work out
+        # what "Can't locate revision" means.
+        _create_database_if_missing(drop_first=True)
+        command.upgrade(_alembic_config(), "head")
 
     test_engine = create_engine(TEST_DATABASE_URL)
     yield test_engine
