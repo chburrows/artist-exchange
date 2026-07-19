@@ -3,9 +3,20 @@ name = "ax"
 version = "0.1.0"
 description = "Artist Exchange API"
 requires-python = ">=3.12"
-# Runtime deps (fastapi, sqlalchemy, alembic, ...) land in Phase 1 alongside
-# the code that needs them.
-dependencies = []
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.28",
+    "typer>=0.15",
+]
+
+[project.scripts]
+ax = "ax.cli:app"
 
 [build-system]
 requires = ["hatchling"]

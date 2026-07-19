@@ -1,0 +1,80 @@
+name: nightly-snapshot
+
+# The critical path of the whole product. Week-over-week growth cannot be
+# computed until weeks of snapshots exist, and Last.fm exposes no history
+# to backfill from — so a night missed here is a permanent gap in every
+# artist's series.
+"on":
+  schedule:
+    # 07:00 UTC, after Last.fm's daily counts settle.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: "Date to snapshot (YYYY-MM-DD). Blank = today UTC."
+        required: false
+        type: string
+
+# Never let two snapshot runs overlap. The job is idempotent, so a
+# collision would not corrupt data, but two concurrent runs would double
+# the request rate and risk tripping Last.fm's rate limit.
+concurrency:
+  group: nightly-snapshot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /internal/jobs/snapshot
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          INTERNAL_JOB_TOKEN: ${{ secrets.INTERNAL_JOB_TOKEN }}
+          AS_OF: ${{ inputs.as_of }}
+        run: |
+          set -euo pipefail
+
+          url="${API_BASE_URL%/}/internal/jobs/snapshot"
+          if [ -n "${AS_OF}" ]; then
+            url="${url}?as_of=${AS_OF}"
+          fi
+
+          # Retry with backoff. Re-running is always safe: the job is
+          # idempotent on (artist_id, as_of_date), so a retry after a
+          # partial write converges rather than duplicating.
+          for attempt in 1 2 3; do
+            echo "Attempt ${attempt}: POST ${url}"
+
+            # --fail-with-body so a non-2xx still prints the JSON summary.
+            # Without it a failed run reports only an exit code, and the
+            # useful part — which artists failed and why — is discarded.
+            if curl --fail-with-body --silent --show-error \
+                    --max-time 600 \
+                    --request POST \
+                    --header "Authorization: Bearer ${INTERNAL_JOB_TOKEN}" \
+                    "${url}" | tee response.json; then
+              echo
+              echo "Snapshot succeeded on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Attempt ${attempt} failed."
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+
+          echo "All 3 attempts failed."
+          exit 1
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::error title=Nightly snapshot failed::\
+          Snapshots did not run. Last.fm has no history API, so this day \
+          cannot be backfilled from upstream — re-run this workflow via \
+          workflow_dispatch as soon as possible. Re-runs are safe."

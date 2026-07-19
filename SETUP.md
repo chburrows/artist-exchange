@@ -40,7 +40,8 @@ uv run ax reset                       # migrate + seed + fake history + simulate
 | `LASTFM_SHARED_SECRET` | `secrets.env` | not needed for `artist.getInfo`, but keep them together |
 | `INTERNAL_JOB_TOKEN` | generate: `openssl rand -hex 32` | bearer token for `/internal/jobs/*` |
 | `SESSION_SECRET` | generate: `openssl rand -hex 32` | signs session cookies |
-| `ENVIRONMENT` | `local` \| `production` | |
+| `ENVIRONMENT` | `local` \| `test` \| `production` | |
+| `WEB_ORIGIN` | `http://localhost:3000` locally; the Railway web URL in production | the single allowed CORS origin |
 
 ### `apps/web/.env.local`
 
@@ -52,24 +53,103 @@ uv run ax reset                       # migrate + seed + fake history + simulate
 
 ## Railway deploy
 
-Three services in one project:
+As of Phase 1 only **Postgres** and **api** need to exist. The `web`
+service arrives with Phase 5.
 
-1. **Postgres** — add the managed Postgres plugin. It provides `DATABASE_URL`.
-2. **api** — deploy from `services/api/Dockerfile`. Set `LASTFM_API_KEY`, `LASTFM_SHARED_SECRET`, `INTERNAL_JOB_TOKEN`, `SESSION_SECRET`, `ENVIRONMENT=production`. Reference `DATABASE_URL` from the Postgres service. Run `alembic upgrade head` as the release command.
-3. **web** — deploy from `apps/web/Dockerfile`, with `NEXT_PUBLIC_API_BASE_URL` pointing at the api service's public URL.
+The Docker **build context is the repo root**, not `services/api` — the uv
+workspace root (`pyproject.toml`, `uv.lock`) and `alembic.ini` live there.
+`services/api/railway.json` already encodes this, along with the release
+command and health check, so most of the setup below is just secrets.
 
-Both services deploy on push to `main`.
+### 1. Postgres
+
+Add the managed Postgres plugin to the project. It exposes a
+`DATABASE_URL` that the api service references — do not copy the value,
+reference it, so a credential rotation does not silently break the api.
+
+### 2. api
+
+Create a service from this GitHub repo. Railway reads
+`services/api/railway.json`, which sets:
+
+- **Dockerfile**: `services/api/Dockerfile`
+- **Release command**: `alembic upgrade head` — migrations run on every
+  deploy, before the new container takes traffic
+- **Health check**: `/health` (liveness only; it deliberately does not
+  touch the database, so a brief DB blip cannot trigger a restart loop)
+
+Set the root directory to `/` (the repo root) so the build context is
+right, then set these variables:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | reference the Postgres service's variable |
+| `LASTFM_API_KEY` | from `secrets.env` |
+| `LASTFM_SHARED_SECRET` | from `secrets.env` |
+| `INTERNAL_JOB_TOKEN` | `openssl rand -hex 32` — keep this value, GitHub needs it too |
+| `SESSION_SECRET` | `openssl rand -hex 32` |
+| `ENVIRONMENT` | `production` |
+| `WEB_ORIGIN` | the web URL once Phase 5 deploys; until then anything |
+
+Then generate a public domain for the service and note the URL.
+
+### 3. Seed the production universe
+
+The artist universe is a one-time load. From the Railway service shell,
+or locally with `DATABASE_URL` pointed at production:
+
+```bash
+uv run ax seed-artists
+```
+
+Re-running is safe — it matches on `slug` and updates identity fields
+only, never market state.
 
 ## GitHub Actions secrets
 
-Set via `gh secret set <NAME>`:
+```bash
+gh secret set INTERNAL_JOB_TOKEN     # exactly the api service's value
+gh secret set API_BASE_URL           # e.g. https://api-production-xxxx.up.railway.app
+```
 
-| Secret | Value |
-|---|---|
-| `INTERNAL_JOB_TOKEN` | must match the api service's value exactly |
-| `API_BASE_URL` | the Railway api public URL |
+The nightly workflow POSTs to `$API_BASE_URL/internal/jobs/snapshot` with
+that bearer token at 07:00 UTC. It has `workflow_dispatch` enabled, so you
+can trigger it by hand from the Actions tab, optionally passing an `as_of`
+date to backfill or re-run a specific night.
 
-The nightly workflow POSTs to `$API_BASE_URL/internal/jobs/snapshot` with that bearer token. It has `workflow_dispatch` enabled, so you can trigger it by hand from the Actions tab — safe at any time, because the job is idempotent on `(artist_id, as_of_date)`.
+**Manual re-runs are always safe** — the job is idempotent on
+`(artist_id, as_of_date)`, verified locally against the live API and
+covered by the I12 tests.
+
+## Verifying the deploy
+
+```bash
+curl -fsS "$API_BASE_URL/health"
+
+# Should 401 — the endpoint is public, the token is the only guard.
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$API_BASE_URL/internal/jobs/snapshot"
+
+# Trigger a real run and watch the summary.
+gh workflow run nightly-snapshot.yml
+gh run watch
+```
+
+Then confirm the data landed, and confirm a second run does not duplicate
+it:
+
+```sql
+SELECT as_of_date, count(*), count(DISTINCT artist_id)
+FROM metric_snapshots GROUP BY as_of_date ORDER BY as_of_date;
+```
+
+A full run is ~200 artists / 400 rows and takes about 50 seconds. Run the
+workflow twice and confirm the row count is **unchanged** — that is
+invariant I12 observed in production.
+
+**Then check again 24 hours later, unattended.** Phase 1 is not done until
+the cron has fired on its own: everything downstream depends on history
+that only accumulates in wall-clock time, and Last.fm has no history API
+to backfill a missed night from.
 
 ## Verifying the setup
 

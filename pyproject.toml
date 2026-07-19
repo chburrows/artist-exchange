@@ -36,6 +36,12 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.isort]
+# `ax` is installed into the venv as a workspace member, so isort would
+# otherwise sort it with third-party packages and scatter our own imports
+# among fastapi/sqlalchemy.
+known-first-party = ["ax", "tests"]
+
 [tool.mypy]
 python_version = "3.12"
 warn_unused_configs = true

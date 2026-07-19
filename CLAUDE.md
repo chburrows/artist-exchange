@@ -32,11 +32,16 @@ uv run pytest tests/core      # the fast, pure unit tests
 uv run alembic upgrade head   # apply migrations
 uv run alembic check          # fail if models drift from migrations
 
-uv run ax reset               # drop + migrate + seed + fake history + simulated trades (<30s)
 uv run ax seed-artists        # load the curated artist universe
-uv run ax fake-history --days 120 --seed 42
-uv run ax simulate-trades --users 50 --days 120
-uv run ax backtest            # print an index/price series from fixtures
+uv run ax snapshot            # run the nightly metric fetch locally
+uv run ax snapshot --limit 5  # smoke-test against live Last.fm, cheaply
+
+# Not built yet — they arrive with the phase that needs them. A stub that
+# prints "not implemented" would be worse than an honest absence.
+uv run ax reset               # Phase 4
+uv run ax fake-history --days 120 --seed 42   # Phase 3
+uv run ax simulate-trades --users 50 --days 120  # Phase 4
+uv run ax backtest            # Phase 2
 
 pnpm dev                      # Next.js dev server
 pnpm build                    # static export
@@ -83,6 +88,10 @@ These are rules, not preferences. Violating one is a bug even if tests pass.
 - **`ax fake-history` is dev-only.** It must never be run against production or surfaced as real data.
 - **Talent Scout depends on denormalized columns.** `transactions.index_score_at_trade` and `fair_value_cents_at_trade` are written at trade time and are immutable history — recomputing them later from snapshots would be both slow and wrong.
 - **Right of publicity**: every artist page carries a "not affiliated with or endorsed by" disclaimer, and v1 uses generated geometric avatars, not artist photography.
+- **Last.fm reports "artist not found" as HTTP 200** with `{"error": 6}` in the body. Always parse the body before trusting the status code, or the job records garbage as a real observation.
+- **Column types come from `type_annotation_map` in `db/base.py`, not per-column annotations.** `Mapped[datetime | None]` silently ignores an `Annotated` alias, which once produced seven naive timestamp columns including the glide window. Add schema-wide type defaults there, never a per-column alias you have to remember.
+- **httpx logs full request URLs at INFO, and ours carry `api_key`.** `logging_config.py` exists only to suppress that. Call `configure_third_party_logging()` in any new entry point, or the Last.fm key lands in production logs.
+- **`ax snapshot` hits the live API and spends rate-limit budget.** Use `--limit` when smoke-testing; a full run is ~200 requests over ~52s.
 
 ## Conventions
 

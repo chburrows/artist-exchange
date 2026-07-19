@@ -1,0 +1,61 @@
+"""Protected job endpoints, driven by GitHub Actions cron.
+
+Jobs live behind HTTP rather than in a worker process because the schedule
+is one run a night: an always-on worker would be a second deployable to
+operate, monitor, and pay for, in exchange for nothing. GitHub Actions
+already has cron, retries, `workflow_dispatch`, and a failure-notification
+path.
+
+Safe to call by hand at any time — the underlying job is idempotent on
+`(artist_id, as_of_date)`.
+"""
+
+from datetime import UTC, date, datetime
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from ax.api.deps import MetricProviderDep, require_job_token
+from ax.db.session import get_db
+from ax.jobs.snapshot import run_snapshot
+
+router = APIRouter(
+    prefix="/internal/jobs",
+    tags=["internal"],
+    dependencies=[Depends(require_job_token)],
+    # These endpoints are operational, not part of the product API. Keeping
+    # them out of the schema keeps them out of the generated TypeScript
+    # client in apps/web, which should have no idea they exist.
+    include_in_schema=False,
+)
+
+DbDep = Annotated[Session, Depends(get_db)]
+
+
+@router.post("/snapshot", status_code=status.HTTP_200_OK)
+def snapshot(
+    session: DbDep,
+    provider: MetricProviderDep,
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    """Fetch and store today's metrics for every active artist.
+
+    `as_of` is an explicit override for backfills and for re-running a
+    night that failed. It defaults to the current UTC date — computed
+    here, at the I/O boundary, and passed down, so the job itself stays
+    time-injectable and testable.
+    """
+    as_of_date = as_of or datetime.now(UTC).date()
+    result = run_snapshot(session, provider, as_of_date)
+
+    if not result.ok:
+        # A non-2xx makes `curl -f` in the Action fail loudly. A run that
+        # aborted on bad credentials must not look like a success in the
+        # Actions log.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result.summary(),
+        )
+
+    return result.summary()

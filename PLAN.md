@@ -31,7 +31,7 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 ## Progress
 
 - [x] **Phase 0** — Hygiene, project docs, CI skeleton
-- [ ] **Phase 1** — Schema, snapshotter, deployed ← *critical path, do first*
+- [~] **Phase 1** — Schema, snapshotter — *code complete and verified locally; awaiting Railway deploy*
 - [ ] **Phase 2** — Pure core + invariant tests
 - [ ] **Phase 3** — Index + reversion on real data
 - [ ] **Phase 4** — Auth, trading, portfolio API
@@ -94,6 +94,23 @@ Build `db/models.py`, the initial Alembic migration, `providers/lastfm.py`, `job
 Idempotency comes from the primary key `(artist_id, as_of_date, source, metric_key)` with `ON CONFLICT DO UPDATE`, so re-runs and manual retries are always safe. Last.fm allows ~5 req/s; 200 artists sequential with backoff is ~40s, no concurrency needed.
 
 **Done when:** `metric_snapshots` grows by ~200 rows nightly in production, unattended.
+
+### As built
+
+Local verification against the live Last.fm API: **200/200 artists, 400 rows, 51.9s**, zero not-found and zero failures. Run twice for the same date, the row count stayed at 400 — I12 observed on real data, not just in tests. 42 tests green; `alembic check` clean; the image builds, serves `/health` in 2s, and stops in 0.4s.
+
+Decisions and surprises worth carrying forward:
+
+- **The whole schema shipped in one migration**, not just Phase 1's tables. The data model was already fully specified, so production carries the finished shape from the first deploy and later phases are code-only.
+- **Last.fm reports "artist not found" as HTTP 200** with an error body. A provider that trusts the status code records garbage as a real observation. The body is parsed for `error` before anything else.
+- **`Mapped[datetime | None]` silently ignores an `Annotated` column alias.** The first autogenerate produced seven *naive* timestamp columns, including `glide_start_at`/`glide_end_at` — which would have made the Phase 2 glide interpolation wrong by the server's UTC offset. Fixed at the root with `type_annotation_map` on `Base`, so it cannot recur for any future column.
+- **httpx logs full request URLs at INFO, and ours carry `api_key`.** The first live run wrote the Last.fm key into the logs; in production that would put a secret into Railway's log aggregator. `logging_config.py` exists solely to prevent this.
+- **The artist universe is generated from the API, not hand-written**, so every entry is guaranteed to resolve — hence zero not-found on a full run. `scripts/build_seed.py` is the one-off generator; its output is committed and reviewable.
+- **The seed generator must round-robin across genre tags.** Concatenating them looked equivalent but wasn't: resolution stops at the target count, so the first few tags filled the entire growth tier. The first run produced a "growth tier" of shoegaze, hyperpop and midwest emo with zero reggaeton, k-pop, grime or jungle.
+- **Artists named entirely in non-Latin scripts slugify to the empty string**, which collides on `artists.slug`. They fall back to a stable hash of the name.
+- **`alembic/env.py` must not overwrite an explicitly-supplied `sqlalchemy.url`.** It did, which meant the test harness migrated — and would have written to — the developer's real database.
+
+Deferred to Phase 4, where the trading semantics are settled: the `v_balances` / `v_positions` views. The tables they read from exist; the views do not yet.
 
 ---
 
