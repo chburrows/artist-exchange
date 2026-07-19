@@ -31,7 +31,7 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 ## Progress
 
 - [x] **Phase 0** — Hygiene, project docs, CI skeleton
-- [~] **Phase 1** — Schema, snapshotter — *deployed to Railway 2026-07-19; awaiting unattended cron confirmation (see "Confirming the cron" below)*
+- [x] **Phase 1** — Schema, snapshotter — *deployed to Railway 2026-07-19; unattended cron confirmed 2026-07-19 (schedule-trigger run, 200/200 artists, 400 rows upserted, `max(fetched_at)` 09:01 UTC verified in prod DB)*
 - [ ] **Phase 2** — Pure core + invariant tests
 - [ ] **Phase 3** — Index + reversion on real data
 - [ ] **Phase 4** — Auth, trading, portfolio API
@@ -130,9 +130,13 @@ The nightly Action fires at **07:00 UTC**. Because `as_of_date` is the UTC date 
 So the check is *not* "row count doubled". It is:
 
 1. `gh run list --workflow=nightly-snapshot.yml` shows a run whose trigger is `schedule`, not `workflow_dispatch`.
-2. `SELECT as_of_date, count(*), max(fetched_at) ... GROUP BY as_of_date` shows `max(fetched_at)` at ~07:00 UTC.
+2. `SELECT as_of_date, count(*), max(fetched_at) ... GROUP BY as_of_date` shows `max(fetched_at)` at or after 07:00 UTC.
+
+"At or after", not "at": GitHub delays scheduled workflows under load — on-the-hour crons are the most congested slots, and hours-late (or occasionally dropped) runs are documented behavior. A late `fetched_at` is normal; only a missing run for a whole UTC day is a real gap.
 
 A genuinely new `as_of_date` appears only after a UTC day with no manual run — for this deploy, the *second* night.
+
+**Confirmed 2026-07-19**: schedule-trigger run fired 09:01 UTC (2h GitHub delay), succeeded on attempt 1 — 200/200 artists, 400 rows upserted, zero not-found/failed; `max(fetched_at)` 09:01 UTC verified in the production DB.
 
 ---
 
