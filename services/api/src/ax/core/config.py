@@ -116,11 +116,16 @@ microcents). Higher = a deeper market (more shares trade before price
 moves materially, less slippage per trade); lower = a shallower, more
 reactive-to-flow market."""
 
-TRADE_FEE_BPS = 75
+TRADE_FEE_BPS = 100
 """Fee charged on both legs of every trade, in basis points of the trade
 amount. Higher = a stronger tax on round-tripping / gap-arbitrage (part
 of what makes mechanically harvesting the price-to-fair-value gap
-unprofitable), but also a higher cost for genuine scouting trades."""
+unprofitable), but also a higher cost for genuine scouting trades.
+Raised from an initial 75 to 100 after I14's patient-harvester
+simulation (test_sim_arb.py) showed a small but real profit
+(+0.2%-0.8% over 200 days across seeds) at sigma_daily=0.5% with 75bps;
+100bps flips it negative for every seed at that volatility, per
+PHASE2.md's tuning order (fee first, then REVERSION_RATE_BPS)."""
 
 MAX_SLIPPAGE_BPS = 300
 """Maximum allowed spot-price move (in bps of the pre-trade spot) for a
