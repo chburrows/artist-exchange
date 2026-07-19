@@ -142,6 +142,10 @@ A genuinely new `as_of_date` appears only after a UTC day with no manual run —
 
 ## Phase 2 — The pure core and its tests (~2–3 days)
 
+> **Execution spec: [`PHASE2.md`](./PHASE2.md).** Written after a full design review;
+> where it and this section disagree (integer glide math, reversion in bps, robust
+> level z, I8/I14 test formulations, cap semantics), PHASE2.md is authoritative.
+
 `services/api/src/ax/core/{config,money,amm,index,ledger}.py`. No SQLAlchemy, no FastAPI, no I/O, no `datetime.now()` — time is always a parameter. Purity is enforced mechanically by `tests/test_core_purity.py`, which walks the ASTs and asserts no import outside stdlib. That test is the cheapest guard against the core rotting into DB-coupled mess.
 
 ### Index Score
