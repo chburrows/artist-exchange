@@ -32,7 +32,7 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 
 - [x] **Phase 0** — Hygiene, project docs, CI skeleton
 - [x] **Phase 1** — Schema, snapshotter — *deployed to Railway 2026-07-19; unattended cron confirmed 2026-07-19 (schedule-trigger run, 200/200 artists, 400 rows upserted, `max(fetched_at)` 09:01 UTC verified in prod DB)*
-- [ ] **Phase 2** — Pure core + invariant tests
+- [x] **Phase 2** — Pure core + invariant tests — *I1–I11, I13–I15 green (I12 already covered by Phase 1); 99.65% coverage on `ax.core`; `ax backtest` replays the committed fixture; `TRADE_FEE_BPS` retuned 75→100 bps after the I14 sim (see "As built" below)*
 - [ ] **Phase 3** — Index + reversion on real data
 - [ ] **Phase 4** — Auth, trading, portfolio API
 - [ ] **Phase 5** — The SPA
@@ -245,6 +245,18 @@ MAGIC_LINK_TTL_MINUTES      = 15
 ```
 
 **Done when:** invariants I1–I15 pass, ~90% coverage on `core/`, and `ax backtest` prints an index/price series from a CSV fixture.
+
+### As built
+
+All corrections in PHASE2.md's spec (C1–C13) implemented as written — integer microcent glide, bps reversion with a minimum-move floor, robust (median/MAD) z-scores on both the growth and level terms, the two-bot I14 simulation. Full pure-core suite (`services/api/tests/core`, 74 tests) runs in ~5s with no DB and no network; `--cov` gives 99.65% on `ax.core` against the 90% gate.
+
+Decisions and surprises worth carrying forward:
+
+- **I14's simulation caught a real bot-design bug before it became a false pass.** An early "patient harvester" sized each entry up to the full `MAX_SLIPPAGE_BPS` budget in one trade. On this AMM's calibrated depth (`AMM_DEPTH_SHARES = 2_000`), that single trade's own price impact (~3%) is comparable to the ~2–3% gaps it was trying to harvest — the bot was erasing its own edge before the reversion ever got a chance to realize it, then eating the round-trip fee on top for a reliable, sizeable loss. Fixed by capping each entry's impact to a fraction of the currently observed gap, leaving room for the reversion itself to do the work. This is the sim behaving exactly as intended: it is supposed to find the best adversary the guardrails must beat, not the first bot that happens to lose.
+- **`TRADE_FEE_BPS` raised 75 → 100 bps.** With the sizing bug fixed, the patient harvester still cleared a small profit (+0.2–0.8% over 200 simulated days) at `sigma_daily = 0.5%`, the volatility regime the defaults are required to win. Per the tuning order PHASE2.md prescribes (fee first, then `REVERSION_RATE_BPS`), raising the fee alone flips every seed negative at that volatility without touching the reversion rate. Bot A's margins were untouched (a higher fee only makes round-tripping worse for it).
+- **The backtest fixture needed 8 "steady" artists, not 2–3, to make the population median land near 50.** The cross-sectional median is an order statistic of the *combined* growth+level score, not of either marginal term alone — each term can be separately well-centered by construction (robust z) while a single noisy draw still visibly shifts the population median, if the "normal" majority is too small relative to the deliberately extreme named archetypes (breakout, laggard, viral-spike). A larger steady population damps that sampling noise down to the documented ±1 (I9).
+- **I9's "median ≈ 50" check needed a real day-by-day EWMA-carrying replay of the fixture**, not a single cold-start (`prev_ewma=None`) snapshot — a single-day check was off by more than the ±1 tolerance in early iterations. `tests/core/fixture_data.py`'s `replay()` does this; `ax backtest` (`cli.py`) does the same thing again independently, since production code cannot import test code.
+- **The archetype assertions (breakout > 60, laggard < 45 with falling fair value, steady "hovering", viral-spike spike-then-decay, gappy's window fallback, tiny's integer edges) landed in this phase's `test_index.py`**, not deferred to the `ax backtest` CLI work as PHASE2.md's working order originally sequenced — building the fixture-replay harness for I9 made them nearly free to add immediately, and PLAN.md's own "Done when" bullet already treats them as part of `ax backtest`'s verification, not a separate step.
 
 ---
 

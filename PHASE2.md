@@ -488,16 +488,16 @@ commit (repo convention).
 
 ## Done when
 
-- [ ] I1–I11, I13–I15 pass (I12 already green from Phase 1); full suite green.
-- [ ] `uv run pytest services/api/tests/core -q` runs the pure suite fast (< ~30s
+- [x] I1–I11, I13–I15 pass (I12 already green from Phase 1); full suite green.
+- [x] `uv run pytest services/api/tests/core -q` runs the pure suite fast (< ~30s
       including Hypothesis and the sim) with no DB and no network.
-- [ ] Coverage ≥ 90% on `ax.core`, gated in CI.
-- [ ] `mypy --strict` clean on `core/`; purity test untouched and green.
-- [ ] `uv run ax backtest` prints the fixture's index/price series; archetype
+- [x] Coverage ≥ 90% on `ax.core`, gated in CI.
+- [x] `mypy --strict` clean on `core/`; purity test untouched and green.
+- [x] `uv run ax backtest` prints the fixture's index/price series; archetype
       assertions pass; the laggard's fair value visibly falls while its raw counts rise.
-- [ ] I14 frontier table prints in test output; Bot A negative everywhere; Bot B
+- [x] I14 frontier table prints in test output; Bot A negative everywhere; Bot B
       non-positive at σ ≤ 0.5%.
-- [ ] Docs updated: PLAN.md Phase 2 checkbox ticked + a short "As built" subsection
+- [x] Docs updated: PLAN.md Phase 2 checkbox ticked + a short "As built" subsection
       (same pattern as Phase 1's) noting any constant retuned by I14; CLAUDE.md's
       command list moves `ax backtest` out of the "not built yet" block and corrects
       the fast-suite path to `uv run pytest services/api/tests/core`; an "As built"
@@ -505,4 +505,84 @@ commit (repo convention).
 
 ---
 
-*As-built notes and open questions get appended below during execution.*
+## As built
+
+Seven commits landed as planned, in the order specified. `uv run pytest services/api/tests/core`
+runs 74 tests in ~5s with no DB/network; `--cov` reports 99.65% on `ax.core` (single
+uncovered line: `robust_z`'s empty-input guard, never hit because `compute_index` never
+calls it below `MIN_CROSS_SECTION_SIZE`). Full suite (`uv run pytest --cov`, 127 tests
+including Phase 1's DB-backed integration tests) stays green throughout.
+
+**Deviations from this spec, each deliberate:**
+
+1. **The archetype assertions (breakout, laggard, steady, viral-spike, gappy, tiny)
+   landed in commit 4's `test_index.py`, not deferred to commit 7's `ax backtest` work.**
+   The spec's working order sequenced them with the CLI; building the day-by-day,
+   EWMA-carrying fixture replay for I9's "median ≈ 50" check (see #2) made the
+   archetype checks nearly free to add at the same time, and PLAN.md's own Phase 2
+   "Done when" bullet already treats them as verification of `ax backtest`'s output
+   rather than a separate deliverable — so nothing was actually skipped, just pulled
+   forward. `tests/core/fixture_data.py` (test-only) and `cli.py`'s own
+   `_replay_metrics` (commit 7) independently implement the same replay logic;
+   production cannot import test code, so this small duplication is intentional,
+   the same tradeoff `sim.py` already documents for itself.
+
+2. **I9's "median ≈ 50 ± 1 on the realistic fixture universe" needed the fixture's
+   population redesigned twice before it held.** First finding: a single cold-start
+   snapshot (`prev_ewma=None`, no history) was off by more than the ±1 tolerance —
+   the spec's parenthetical ("EWMA history still wobbles it") turned out to mean the
+   check is supposed to run against a *warmed-up*, EWMA-carrying replay, not a single
+   day. Second finding, after building that replay: with only 6 "steady" archetypes
+   plus the extreme named ones (11 artists total), the population median still
+   landed 2+ points off target, seed-dependent. The reason is structural, not a bug:
+   the cross-sectional median is an order statistic of the *combined* growth+level
+   score, and each term being separately centered at 0 (by construction, via robust
+   z) does not make the *joint* distribution's median artist land near (0, 0) with
+   a small population — a single artist's noisy combination of growth-rank and
+   level-rank can be the population's score-median while sitting off-center on each
+   term individually. Raising the steady population to 8 (13 artists total, still
+   "~12" per the spec) damps this down within tolerance. Recorded here rather than
+   loosening the assertion, per the spec's own "never weaken a test" rule.
+
+3. **I14 caught a real bot-design flaw, not a product-economics failure, first.**
+   An early "patient harvester" sized every entry up to the full `MAX_SLIPPAGE_BPS`
+   in one trade. On this AMM's calibrated depth (`AMM_DEPTH_SHARES = 2_000`,
+   `FAIR_VALUE_BASE_CENTS = 1_000` ⇒ `slope ≈ 0.5` cents/share), a single
+   slippage-maxed trade's own impact (~3%) is on the same order as the ~2–3% gaps
+   being harvested — the bot was self-cannibalizing its edge before the reversion
+   had a chance to realize any of it, and then paying the round-trip fee for a
+   reliable loss that looked like "the product wins" for the wrong reason. Fixed by
+   capping each entry's impact to a fraction of the *currently observed* gap
+   (`_MAX_IMPACT_FRACTION_OF_GAP = 0.2` in `sim.py`), which is what "splitting into
+   multiple trades" (PLAN.md's "why the arbitrage dies") is a proxy for: a
+   sophisticated arbitrageur sizes to the edge available, not to the slippage
+   ceiling. Caught by comparing the printed frontier's shape across σ — a jump from
+   −0.3% to −72% between adjacent σ values was the tell that something other than
+   the product's real economics was driving the number.
+4. **After that fix, Bot B still cleared a small profit (+0.2% to +0.8% over 200
+   days) at `sigma_daily = 0.5%`**, the volatility the defaults are required to beat
+   (I14's assertion). Per the spec's prescribed order — audit first, then
+   `TRADE_FEE_BPS` up to ≤ 150, then `REVERSION_RATE_BPS` — the audit found no
+   further bug (fees charged on both legs, trades executed at glide-start prices as
+   specified), so `TRADE_FEE_BPS` moved from 75 to 100 bps. That alone flips every
+   seed negative at σ ≤ 0.5% (see the frontier table `test_sim_arb.py` prints) and
+   leaves Bot A's already-comfortable losing margin untouched, since a higher fee
+   only taxes round-tripping harder. `REVERSION_RATE_BPS` was not touched.
+
+**Open questions for Phase 3:**
+
+- The printed break-even frontier (σ ∈ {0.25%, 0.5%, 1%, 2%}) turns positive
+  somewhere between σ = 0.5% and σ = 1%/day. Phase 3 should compute real
+  day-to-day fair-value volatility from actual `metric_snapshots` once enough
+  history exists, and confirm it sits comfortably under that line — if it doesn't,
+  `EWMA_ALPHA`, `Z_CLAMP`, or `REVERSION_MAX_MOVE_BPS` are the next levers (they
+  already damp real fair-value swings well below raw signal volatility per
+  PLAN.md's Phase 3 section), not `TRADE_FEE_BPS` again.
+- `SLOPE_UC` (the AMM's calibrated depth) is currently a single platform-wide
+  constant derived from `FAIR_VALUE_BASE_CENTS` and `AMM_DEPTH_SHARES`, applied
+  uniformly across artists in both `sim.py` and (implicitly) production. Real
+  artists span a much wider price range (`FAIR_VALUE_MIN_CENTS = 1` up to whatever
+  a score-100 blue-chip commands) than the sim's clamp of
+  [50, 5_000] cents. Phase 4, which actually lists artists and sets their AMM
+  parameters at listing time, should double check the fixed-slope assumption holds
+  reasonably across that full range rather than only the sim's tested band.

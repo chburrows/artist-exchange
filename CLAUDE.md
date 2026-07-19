@@ -27,21 +27,22 @@ docker compose up -d          # Postgres + adminer
 uv sync                       # Python deps
 pnpm install                  # Node deps
 
-uv run pytest                 # all Python tests
-uv run pytest tests/core      # the fast, pure unit tests
-uv run alembic upgrade head   # apply migrations
-uv run alembic check          # fail if models drift from migrations
+uv run pytest                              # all Python tests
+uv run pytest services/api/tests/core      # the fast, pure unit tests (no DB, no network)
+uv run alembic upgrade head                # apply migrations
+uv run alembic check                       # fail if models drift from migrations
 
 uv run ax seed-artists        # load the curated artist universe
 uv run ax snapshot            # run the nightly metric fetch locally
 uv run ax snapshot --limit 5  # smoke-test against live Last.fm, cheaply
+uv run ax backtest            # replay a metrics CSV through the real index pipeline
+uv run ax backtest --artist breakout  # filter to one artist's full series
 
 # Not built yet — they arrive with the phase that needs them. A stub that
 # prints "not implemented" would be worse than an honest absence.
 uv run ax reset               # Phase 4
 uv run ax fake-history --days 120 --seed 42   # Phase 3
 uv run ax simulate-trades --users 50 --days 120  # Phase 4
-uv run ax backtest            # Phase 2
 
 pnpm dev                      # Next.js dev server
 pnpm build                    # static export
