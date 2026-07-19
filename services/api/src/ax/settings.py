@@ -9,7 +9,16 @@ under `tests/test_core_purity.py`.
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Managed Postgres providers (Railway, Heroku, Render, Fly) all emit
+# `postgresql://...`, and some still emit the legacy `postgres://`.
+# SQLAlchemy maps both to psycopg2, which this project does not install —
+# it uses psycopg 3 — so an unmodified provider URL fails at connect time
+# with `ModuleNotFoundError: No module named 'psycopg2'`.
+_DRIVERLESS_PREFIXES = ("postgresql://", "postgres://")
+_TARGET_PREFIX = "postgresql+psycopg://"
 
 
 class Settings(BaseSettings):
@@ -40,6 +49,22 @@ class Settings(BaseSettings):
     # it is cross-origin even in production. Configured rather than
     # hardcoded because the deployed URL is not knowable from the repo.
     web_origin: str = "http://localhost:3000"
+
+    @field_validator("database_url")
+    @classmethod
+    def _ensure_psycopg_driver(cls, value: str) -> str:
+        """Normalize a provider-supplied URL to the psycopg 3 driver.
+
+        Railway exposes `DATABASE_URL` as `postgresql://...`, which
+        SQLAlchemy resolves to psycopg2 — not installed here. Rewriting it
+        at the boundary means the Railway variable can be referenced
+        directly, with no hand-edited copy of the connection string to
+        drift out of sync when credentials rotate.
+        """
+        for prefix in _DRIVERLESS_PREFIXES:
+            if value.startswith(prefix):
+                return _TARGET_PREFIX + value[len(prefix) :]
+        return value
 
     @property
     def is_production(self) -> bool:
