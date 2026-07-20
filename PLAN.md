@@ -352,6 +352,8 @@ Claim-a-username → session cookie → `STARTING_BALANCE_CENTS` `GRANT` ledger 
 
 `POST /trades` quotes then executes under `SELECT ... FOR UPDATE` on the artist row, appending the ledger row and updating caches atomically. Plus `GET /portfolio`, `GET /artists`, `GET /artists/{slug}/history`, and `jobs/reconcile.py`.
 
+**`jobs/recompute.py` must start taking the same `FOR UPDATE` lock on the artist row once this lands.** It currently runs lock-free — deliberately, per its own docstring — because no concurrent writer exists yet; that stops being true the moment `POST /trades` ships. Without the lock, a trade and a nightly reversion can race on `anchor_cents`/`anchor_target_cents`/`position_cache` for the same artist. Retrofit this in the same PR that adds the trade route, not after.
+
 **`slope_microcents_per_share` is set per artist at listing time in this phase** — Phase 2's simulation validated the fixed-slope formula (`FAIR_VALUE_BASE_CENTS * 1_000_000 / AMM_DEPTH_SHARES`) only across a simulated `[50, 5_000]`-cent fair-value band with one platform-wide constant. Real listed artists will span a wider range (`FAIR_VALUE_MIN_CENTS = 1` cent up to whatever a top blue-chip scores). Confirm the fixed-slope assumption — and therefore the slippage/impact guardrails it feeds — holds reasonably at both ends of the real range before trusting it unmodified; if a score-1 artist or a runaway blue-chip behaves oddly under the AMM, a per-tier or per-artist slope is the fix, not a global constant change.
 
 **Done when:** a shell script runs signup → quote → buy → portfolio → sell → portfolio and shows the expected fee-driven round-trip loss.
