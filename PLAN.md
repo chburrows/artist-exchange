@@ -142,29 +142,48 @@ A genuinely new `as_of_date` appears only after a UTC day with no manual run —
 
 ## Phase 2 — The pure core and its tests (~2–3 days)
 
-> **Execution spec: [`PHASE2.md`](./PHASE2.md).** Written after a full design review;
-> where it and this section disagree (integer glide math, reversion in bps, robust
-> level z, I8/I14 test formulations, cap semantics), PHASE2.md is authoritative.
-
 `services/api/src/ax/core/{config,money,amm,index,ledger}.py`. No SQLAlchemy, no FastAPI, no I/O, no `datetime.now()` — time is always a parameter. Purity is enforced mechanically by `tests/test_core_purity.py`, which walks the ASTs and asserts no import outside stdlib. That test is the cheapest guard against the core rotting into DB-coupled mess.
+
+Built from an execution spec (`PHASE2.md`) written after a full pre-implementation design review, which corrected several things below that would otherwise have put a float in a money path or left an edge case unspecified. This section now shows the corrected, as-built formulas directly — treat everything below as ground truth regardless of whether `PHASE2.md` still exists in the repo.
 
 ### Index Score
 
 Designed so that **monotonic inputs cannot produce monotonic prices**. `playcount` only ever rises; if the index were built on levels, nothing would ever fall and every position would win. Every input is therefore a cross-sectional z-score of a *growth rate* — if the whole universe inflates, every score is unchanged.
 
 ```
-g_s(a,t)   = ln(V[a,t] + 1) - ln(V[a,t-7] + 1)              # log growth per signal
-z_s(a,t)   = clamp(0.6745 * (g_s - median_s) / MAD_s, ±Z_CLAMP)   # median/MAD, not mean/stdev
-Z_s(a,t)   = EWMA_ALPHA * z_s + (1 - EWMA_ALPHA) * Z_s(a,t-1)     # smooth lumpy updates
+g_s(a,t)   = (ln(V[a,t] + 1) - ln(V[a,t-base] + 1)) * GROWTH_LOOKBACK_DAYS / gap_days
+             # base snapshot is whichever day in [t-9, t-5] is closest to t-7 (tie -> older);
+             # rescaled linearly to a nominal 7-day rate when the actual gap isn't 7
+z_s(a,t)   = clamp(0.6745 * (g_s - median_s) / max(MAD_s, ROBUST_Z_MIN_MAD), ±Z_CLAMP)
+             # median/MAD, not mean/stdev; MAD floored so a cross-section where more than
+             # half the artists have identical growth can't divide by zero
+Z_s(a,t)   = z_s                                          on an artist's first observation
+           = EWMA_ALPHA * z_s + (1 - EWMA_ALPHA) * Z_s(a,t-1)   otherwise
 G(a,t)     = Σ SIGNAL_WEIGHTS[s] * Z_s(a,t)                       # weight registry
-S(a,t)     = clamp(zscore(ln(listeners)), ±Z_CLAMP)               # slow size term
-IndexScore = clamp(50 + GROWTH_WEIGHT*G + LEVEL_WEIGHT*S, 1, 100)
-FairValue  = round(FAIR_VALUE_BASE_CENTS * (IndexScore/50) ** FAIR_VALUE_EXPONENT)
+S(a,t)     = clamp(0.6745 * (ln(listeners+1) - median) / max(MAD, ROBUST_Z_MIN_MAD), ±Z_CLAMP)
+             # the SAME robust z as the growth terms, not mean/stdev — centers the
+             # population median at (structurally) 0, which is what makes I9 hold
+IndexScore = clamp(50 + GROWTH_WEIGHT*G + LEVEL_WEIGHT*S, INDEX_MIN, INDEX_MAX)
+FairValue  = max(FAIR_VALUE_MIN_CENTS, int(FAIR_VALUE_BASE_CENTS * (IndexScore/50) ** FAIR_VALUE_EXPONENT + 0.5))
+             # round-half-up (not Python's banker's-rounding `round()`), floored at 1 cent
 ```
+
+If fewer than `MIN_CROSS_SECTION_SIZE` artists are eligible on a given day (missing any configured signal disqualifies an artist for that day), the cross-section is skipped entirely — no scores published, rather than statistics computed on a noisy handful.
 
 Log growth (not percent) is symmetric and immune to small-denominator blowups across a 4-order-of-magnitude size range. Median/MAD stops one viral artist compressing everyone else. Listeners is weighted above playcount because playcount is inflated by superfans re-scrobbling, whereas listeners measures breadth of adoption — which is what "breaking out" actually means.
 
-Missing `t-7` snapshot → fall back to nearest in `[t-9, t-5]`, adjust for actual day gap. None available → artist is `warming_up`, excluded from the cross-section and from listing.
+Missing `t-7` snapshot → fall back to the nearest day in `[t-9, t-5]` as shown above. None available → artist is `warming_up`, excluded from the cross-section and from listing.
+
+**`components` (written to `index_snapshots.components`) is a versioned API, not a debug dump:**
+
+```json
+{"v": 1,
+ "signals": {"lastfm.listeners": {"g": 0.0123, "z": 0.45, "ewma": 0.31, "gap_days": 7},
+             "lastfm.playcount":  {"...": "..."}},
+ "level_z": 1.2, "growth_term": 0.38, "level_term": 1.2, "score_pre_clamp": 61.0}
+```
+
+`ewma` is next day's `prev_ewma` — the smoothing state round-trips through this dict. Phase 3 adds quarantine keys to this same structure (never restructures it); Phase 6's audit trail reads it too.
 
 **Adding YouTube later is one dict entry in `SIGNAL_WEIGHTS` plus a provider class.** No migration, because `metric_snapshots` is long-format.
 
@@ -185,59 +204,78 @@ fee = ceil(amount * TRADE_FEE_BPS / 10_000)                           # both leg
 
 Rounding always favors the market, never the user. That asymmetry plus the fee makes every round trip strictly lossy.
 
+**Position/exposure cap semantics (non-obvious, needed by Phase 4's trade route and Phase 6's leaderboard):**
+
+- `MAX_USER_SUPPLY_SHARE_BPS` is a share of `AMM_DEPTH_SHARES` (a fixed depth constant → 400 shares at current defaults), **not** of an artist's live net supply. Supply-relative would be degenerate: the first buyer of any artist would instantly own 100% and be blocked.
+- `MAX_ARTIST_EXPOSURE_BPS` is a user's post-trade position value in one artist as a fraction of their *total post-trade equity* (cash + all positions, marked to spot) — checked per trade, not per artist in isolation.
+- A buy is **scout-qualified** iff `index_score_at_trade < SCOUT_DISCOVERY_INDEX_MAX` **and** `exec_price_cents < SCOUT_DISCOVERY_PRICE_CENTS` — AND, not OR, so buying a merely-dipped blue-chip doesn't count as scouting an unknown. Selling reduces `scout_shares` proportionally (floored), which resists gaming the Talent Scout leaderboard by buying qualified shares then topping up with a large disqualifying purchase before trimming a sliver on exit.
+
 ### Nightly reversion + glide
 
+Integer microcents end to end — no float ever touches this path:
+
 ```
-gap    = fair_value - market_now
-move   = clamp(round(gap * REVERSION_RATE), ±round(market_now * REVERSION_MAX_MOVE_BPS/10_000))
+gap_cents = fair_value_cents - market_cents
+raw       = abs(gap_cents) * REVERSION_RATE_BPS // 10_000                    # truncating division
+cap       = max(REVERSION_MIN_MOVE_CENTS, market_cents * REVERSION_MAX_MOVE_BPS // 10_000)
+move      = sign(gap_cents) * min(cap, max(REVERSION_MIN_MOVE_CENTS, raw))
 anchor_target = anchor_current + move        # supply term untouched
 ```
 
+`REVERSION_MIN_MOVE_CENTS` exists because truncating division alone makes any gap under ~6–7 cents produce a zero move forever — the floor is what makes convergence exact rather than asymptotic (I11). `anchor_current` above is always the **current interpolated effective anchor**, not the stale stored `anchor_cents`/`anchor_target_cents` endpoint — the cron fires late in practice (observed 2h late on day one in production), and starting a new glide from a stale endpoint would jump price discontinuously at reversion time, exactly what the glide exists to prevent.
+
 Only the anchor moves — **no user's shares or cash change during reversion**, keeping the ledger clean and the job trivially idempotent.
 
-The reversion is not applied as a step. It is stored as an interval and interpolated on read:
+The reversion is not applied as a step. It is stored as an interval and interpolated on read, in integer microcents:
 
 ```python
-def effective_anchor(artist, now) -> int:
-    if now >= artist.glide_end_at: return artist.anchor_target_cents
-    frac = (now - artist.glide_start_at) / (artist.glide_end_at - artist.glide_start_at)
-    return artist.anchor_cents + (artist.anchor_target_cents - artist.anchor_cents) * frac
+def effective_anchor_uc(anchor_uc, target_uc, glide_start, glide_end, now) -> int:
+    if now >= glide_end or glide_end <= glide_start: return target_uc
+    if now <= glide_start: return anchor_uc
+    elapsed = (now - glide_start) // timedelta(microseconds=1)   # exact int, no float
+    total   = (glide_end - glide_start) // timedelta(microseconds=1)
+    return anchor_uc + (target_uc - anchor_uc) * elapsed // total
 ```
 
-This is the fix for the dead-first-session problem: price moves *continuously*, so a user who buys at 2pm sees P&L change by 2:01pm and the chart is always alive. Zero extra infrastructure — no hourly cron, no websocket, no ticker. `REVERSION_GLIDE_HOURS = 24`, so each glide ends exactly as the next begins. Twelve of the highest-leverage lines in the codebase.
+This is the fix for the dead-first-session problem: price moves *continuously*, so a user who buys at 2pm sees P&L change by 2:01pm and the chart is always alive. Zero extra infrastructure — no hourly cron, no websocket, no ticker. `REVERSION_GLIDE_HOURS = 24`, so each glide ends exactly as the next begins.
 
 ### Why the arbitrage dies
 
-- 75 bps each leg → **1.5% round trip**, vs. `REVERSION_RATE = 0.15` capturing 15% of the gap per night. The gap must exceed ~10% of price just to break even.
-- **Price impact self-limits**: buying the discount raises spot via the supply term, shrinking the gap being harvested.
-- `MAX_SLIPPAGE_BPS` forces large arbs to split into multiple trades, each paying full fee.
-- Position caps stop a whale cornering the single biggest discount.
+- 100 bps each leg → **2% round trip**, vs. `REVERSION_RATE_BPS = 1_500` (15%) capturing 15% of the gap per night — the gap must exceed roughly 13% of price just to break even for a bot that round-trips nightly.
+- **Price impact self-limits**: buying the discount raises spot via the supply term, shrinking the gap being harvested. But this is not automatic protection against a *smart* bot — see below.
+- `MAX_SLIPPAGE_BPS` forces large arbs to split into multiple trades, each paying full fee. A bot that instead spends its whole budget up to the slippage ceiling in one trade can self-erase its own edge in a single shot (Phase 2's simulation found exactly this failure mode in its own test harness — see "As built"); the real defense is that doing so is *worse* for the bot, not that the platform prevents it.
+- Position caps stop a whale cornering the single biggest discount (see cap semantics above).
 
-Invariant I14 tests exactly this as a 200-day simulation. Real edge must come from anticipating the *index* — i.e. scouting talent, which is the product.
+Invariant I14 verified this with two adversaries, not one: a naive nightly round-tripper (loses comfortably at every volatility tested) and a patient harvester that holds each position until its own gap converges (the real threat — profitable only once daily fair-value volatility exceeds roughly 0.5–1%/day; see "As built" and Phase 3's note on checking this against real data). Real edge must come from anticipating the *index* — i.e. scouting talent, which is the product.
 
-### `core/config.py` starting values
+### `core/config.py` values (as built)
 
 ```python
 STARTING_BALANCE_CENTS      = 1_000_000   # $10,000
 FAIR_VALUE_BASE_CENTS       = 1_000       # $10 at index 50
 FAIR_VALUE_EXPONENT         = 1.6
+FAIR_VALUE_MIN_CENTS        = 1           # floor so a score-1 artist still quotes a positive price
 INDEX_MIN, INDEX_MAX        = 1.0, 100.0
 GROWTH_WEIGHT               = 10.0
 LEVEL_WEIGHT                = 6.0
 Z_CLAMP                     = 3.0
+ROBUST_Z_MIN_MAD            = 1e-6        # MAD floor; avoids divide-by-zero on a static cross-section
+MIN_CROSS_SECTION_SIZE      = 10          # below this, skip the day rather than publish noise
 EWMA_ALPHA                  = 0.4
 GROWTH_LOOKBACK_DAYS        = 7
+GROWTH_BASE_WINDOW_DAYS     = 2           # base snapshot accepted in [t-9, t-5]
 MIN_SNAPSHOTS_TO_LIST       = 8
 SIGNAL_WEIGHTS              = {"lastfm.listeners": 0.60, "lastfm.playcount": 0.40}
 AMM_DEPTH_SHARES            = 2_000
-TRADE_FEE_BPS               = 75
+TRADE_FEE_BPS               = 100         # retuned from 75 during Phase 2 -- see "As built"
 MAX_SLIPPAGE_BPS            = 300
 MAX_TRADE_SHARES            = 500
-REVERSION_RATE              = 0.15
+REVERSION_RATE_BPS          = 1_500       # integer bps, not a float rate
 REVERSION_MAX_MOVE_BPS      = 1_000
+REVERSION_MIN_MOVE_CENTS    = 1           # floor so a nonzero gap always converges to exactly 0
 REVERSION_GLIDE_HOURS       = 24
-MAX_ARTIST_EXPOSURE_BPS     = 2_500
-MAX_USER_SUPPLY_SHARE_BPS   = 2_000
+MAX_ARTIST_EXPOSURE_BPS     = 2_500       # of a user's post-trade total equity
+MAX_USER_SUPPLY_SHARE_BPS   = 2_000       # of AMM_DEPTH_SHARES (-> 400 shares), NOT of live net supply
 SCOUT_DISCOVERY_INDEX_MAX   = 45.0
 SCOUT_DISCOVERY_PRICE_CENTS = 1_000
 SESSION_TTL_DAYS            = 90
@@ -248,15 +286,15 @@ MAGIC_LINK_TTL_MINUTES      = 15
 
 ### As built
 
-All corrections in PHASE2.md's spec (C1–C13) implemented as written — integer microcent glide, bps reversion with a minimum-move floor, robust (median/MAD) z-scores on both the growth and level terms, the two-bot I14 simulation. Full pure-core suite (`services/api/tests/core`, 74 tests) runs in ~5s with no DB and no network; `--cov` gives 99.65% on `ax.core` against the 90% gate.
+All formulas above are what actually shipped (not what PLAN.md originally proposed pre-review — the differences: integer microcent glide math instead of float, bps-based reversion with a minimum-move floor, robust median/MAD z-scores on both the growth and level terms, and the two-bot I14 simulation instead of one). Full pure-core suite (`services/api/tests/core`, 74 tests) runs in ~5s with no DB and no network; `--cov` gives 99.65% on `ax.core` against the 90% gate.
 
 Decisions and surprises worth carrying forward:
 
-- **I14's simulation caught a real bot-design bug before it became a false pass.** An early "patient harvester" sized each entry up to the full `MAX_SLIPPAGE_BPS` budget in one trade. On this AMM's calibrated depth (`AMM_DEPTH_SHARES = 2_000`), that single trade's own price impact (~3%) is comparable to the ~2–3% gaps it was trying to harvest — the bot was erasing its own edge before the reversion ever got a chance to realize it, then eating the round-trip fee on top for a reliable, sizeable loss. Fixed by capping each entry's impact to a fraction of the currently observed gap, leaving room for the reversion itself to do the work. This is the sim behaving exactly as intended: it is supposed to find the best adversary the guardrails must beat, not the first bot that happens to lose.
-- **`TRADE_FEE_BPS` raised 75 → 100 bps.** With the sizing bug fixed, the patient harvester still cleared a small profit (+0.2–0.8% over 200 simulated days) at `sigma_daily = 0.5%`, the volatility regime the defaults are required to win. Per the tuning order PHASE2.md prescribes (fee first, then `REVERSION_RATE_BPS`), raising the fee alone flips every seed negative at that volatility without touching the reversion rate. Bot A's margins were untouched (a higher fee only makes round-tripping worse for it).
+- **I14's simulation caught a real bot-design bug before it became a false pass.** An early "patient harvester" sized each entry up to the full `MAX_SLIPPAGE_BPS` budget in one trade. On this AMM's calibrated depth (`AMM_DEPTH_SHARES = 2_000`), that single trade's own price impact (~3%) is comparable to the ~2–3% gaps it was trying to harvest — the bot was erasing its own edge before the reversion ever got a chance to realize it, then eating the round-trip fee on top for a reliable, sizeable loss. Fixed by capping each entry's impact to a fraction of the currently observed gap, leaving room for the reversion itself to do the work. This is the sim behaving exactly as intended: it is supposed to find the best adversary the guardrails must beat, not the first bot that happens to lose. Caught by an implausible discontinuity in the printed break-even frontier (a jump from -0.3% to -72% between adjacent volatility values) — worth the same skepticism toward any future simulation whose output jumps around implausibly.
+- **`TRADE_FEE_BPS` raised 75 → 100 bps.** With the sizing bug fixed, the patient harvester still cleared a small profit (+0.2–0.8% over 200 simulated days) at `sigma_daily = 0.5%`, the volatility regime the defaults are required to win. Per the tuning order the design review prescribed (fee first, then `REVERSION_RATE_BPS`), raising the fee alone flips every seed negative at that volatility without touching the reversion rate. Bot A's margins were untouched (a higher fee only makes round-tripping worse for it). The printed frontier (`test_sim_arb.py`) turns positive somewhere between `sigma_daily=0.5%` and `1%` — see Phase 3's note on checking this against real data.
 - **The backtest fixture needed 8 "steady" artists, not 2–3, to make the population median land near 50.** The cross-sectional median is an order statistic of the *combined* growth+level score, not of either marginal term alone — each term can be separately well-centered by construction (robust z) while a single noisy draw still visibly shifts the population median, if the "normal" majority is too small relative to the deliberately extreme named archetypes (breakout, laggard, viral-spike). A larger steady population damps that sampling noise down to the documented ±1 (I9).
 - **I9's "median ≈ 50" check needed a real day-by-day EWMA-carrying replay of the fixture**, not a single cold-start (`prev_ewma=None`) snapshot — a single-day check was off by more than the ±1 tolerance in early iterations. `tests/core/fixture_data.py`'s `replay()` does this; `ax backtest` (`cli.py`) does the same thing again independently, since production code cannot import test code.
-- **The archetype assertions (breakout > 60, laggard < 45 with falling fair value, steady "hovering", viral-spike spike-then-decay, gappy's window fallback, tiny's integer edges) landed in this phase's `test_index.py`**, not deferred to the `ax backtest` CLI work as PHASE2.md's working order originally sequenced — building the fixture-replay harness for I9 made them nearly free to add immediately, and PLAN.md's own "Done when" bullet already treats them as part of `ax backtest`'s verification, not a separate step.
+- **The archetype assertions (breakout > 60, laggard < 45 with falling fair value, steady "hovering" strictly between the extremes, viral-spike spike-then-decay, gappy's window fallback, tiny's integer edges) landed in `test_index.py` alongside the fixture itself**, rather than waiting for the `ax backtest` CLI work — building the fixture-replay harness for I9 made them nearly free to add immediately, and this section's own "Done when" bullet already treats them as part of `ax backtest`'s verification, not a separate step.
 
 ---
 
@@ -281,6 +319,10 @@ Nothing anomalous happens from the system's perspective; the fundamentals genuin
 
 **The real long-term fix is the second signal.** Gaming Last.fm and YouTube simultaneously is dramatically harder than gaming one. This promotes the YouTube provider from "nice v2 upgrade" to part of the market-integrity story — pull it forward if Phase 3 shows Last.fm is noisy or if any manipulation appears.
 
+### Checking real volatility against Phase 2's break-even frontier
+
+Phase 2's I14 simulation (`services/api/tests/core/test_sim_arb.py`) showed a patient discount-buying bot stops reliably losing money somewhere between `sigma_daily = 0.5%` and `1%` of daily fair-value volatility — the printed frontier table gives the exact per-volatility mean returns from that run. Once a few weeks of real `index_snapshots` exist, compute the actual day-to-day volatility of `fair_value_cents` per artist and confirm the real series sits comfortably under that line. If it doesn't, the next levers — in order — are `EWMA_ALPHA` (down, more damping), `Z_CLAMP` (down, tighter outlier control), or `REVERSION_MAX_MOVE_BPS` (down, slower conversion into price); these already exist specifically to keep real fair-value swings much calmer than raw signal volatility. `TRADE_FEE_BPS` and `REVERSION_RATE_BPS` were already tuned against the simulation in Phase 2 and should not need to move again for this.
+
 **Done when:** real fair-value curves exist for ~200 artists across the weeks Phase 1 has been accumulating (first moment the product's core claim is visibly true), and the divergence flag runs nightly with a reviewable queue.
 
 ---
@@ -290,6 +332,8 @@ Nothing anomalous happens from the system's perspective; the fundamentals genuin
 Claim-a-username → session cookie → `STARTING_BALANCE_CENTS` `GRANT` ledger row, all in one DB transaction. Optional email attach + magic link recovery.
 
 `POST /trades` quotes then executes under `SELECT ... FOR UPDATE` on the artist row, appending the ledger row and updating caches atomically. Plus `GET /portfolio`, `GET /artists`, `GET /artists/{slug}/history`, and `jobs/reconcile.py`.
+
+**`slope_microcents_per_share` is set per artist at listing time in this phase** — Phase 2's simulation validated the fixed-slope formula (`FAIR_VALUE_BASE_CENTS * 1_000_000 / AMM_DEPTH_SHARES`) only across a simulated `[50, 5_000]`-cent fair-value band with one platform-wide constant. Real listed artists will span a wider range (`FAIR_VALUE_MIN_CENTS = 1` cent up to whatever a top blue-chip scores). Confirm the fixed-slope assumption — and therefore the slippage/impact guardrails it feeds — holds reasonably at both ends of the real range before trusting it unmodified; if a score-1 artist or a runaway blue-chip behaves oddly under the AMM, a per-tier or per-artist slope is the fix, not a global constant change.
 
 **Done when:** a shell script runs signup → quote → buy → portfolio → sell → portfolio and shows the expected fee-driven round-trip loss.
 
@@ -408,13 +452,13 @@ Hypothesis for I1–I7.
 | I5 | Curve symmetry: sell proceeds `s → s-n` == buy cost `s-n → s`, pre-fee, up to rounding direction |
 | I6 | No negative supply, no overselling; supply is exactly `Σ share_delta` |
 | I7 | Rounding always favors the house, for every operation |
-| **I8** | **Cumulative-metric immunity: adding a constant to every artist's log-growth leaves every index score bit-identical.** The direct test that prices can fall — the most important test in the repo |
-| I9 | Scores always in `[1,100]`; universe median ≈ 50 ± 1 |
+| **I8** | **Cumulative-metric immunity: adding a constant to every artist's log-growth leaves every z-score (and therefore score) unchanged.** Proven three ways — bit-identical on dyadic inputs, identical to <1e-9 on arbitrary floats, and behaviorally on realistic monotonically-increasing counts (a slower-than-median grower still ends up scoring below 50, fair value below the artist's own earlier value). The direct test that prices can fall — the most important test in the repo |
+| I9 | Scores always in `[1,100]`; universe median ≈ 50 ± 1 on a realistic population (structural via the level term's robust z; the growth term's EWMA carry can still nudge it, hence the ±1 rather than exact) |
 | I10 | Reversion moves strictly toward fair value, never past it, never beyond `REVERSION_MAX_MOVE_BPS` |
-| I11 | Reversion is a contraction: iterating with fixed fair value converges monotonically |
+| I11 | Reversion is a contraction: iterating with fixed fair value converges monotonically to exactly zero gap (not asymptotically) |
 | I12 | Snapshot idempotency: running twice for the same `(artist_id, as_of_date)` yields identical state, zero extra ledger rows |
 | I13 | Any trade passing the slippage guard moves price ≤ `MAX_SLIPPAGE_BPS` |
-| I14 | Anti-arb: a bot buying the 10 biggest discounts / selling the 10 biggest premiums nightly has negative expected return over 200 simulated days |
+| I14 | Anti-arb, tested against two adversaries over a simulated 200-artist/200-day market: a naive nightly round-tripper (must lose at every volatility tested) and a patient harvester that holds each position until its own gap converges (must not profit at `sigma_daily ≤ 0.5%`, the volatility real fair value is expected to stay under — see Phase 3's note on verifying this against real data) |
 | I15 | Glide is continuous and monotone; equals `anchor` at start, `anchor_target` at end |
 
 ---
@@ -433,11 +477,12 @@ Hypothesis for I1–I7.
 `services/api/src/ax/cli.py` — the iteration-speed unlock:
 
 - `ax seed-artists` — load the 200-artist seed.
+- `ax backtest` *(built in Phase 2)* — replay a long-format metrics CSV through the real `compute_index` pipeline, carrying EWMA state day to day; defaults to the committed fixture, `--artist` filters to one slug's full series. No DB, no network — this is `core/` exercised against a CSV instead of `metric_snapshots`.
 - `ax fake-history --days 120 --seed 42` — generate synthetic `metric_snapshots` via a GBM walk on listeners with a monotonic playcount derived from it, **so the fake data carries the same pathology as the real data** and genuinely exercises the index formula. Then run the real recompute job over each historical date in order. Deterministic under `--seed`.
 - `ax simulate-trades --users 50 --days 120` — random agents trading through the real AMM and real ledger path, producing realistic price history, populated leaderboards, non-empty portfolios.
 - `ax reset` — drop, migrate, and all of the above in one command, under 30 seconds.
 
-Phase 5 UI work never waits on real history, charts have real shape from day one, and every local DB is reproducible. The `--seed 42` fixtures also feed the I14 simulation.
+Phase 5 UI work never waits on real history, charts have real shape from day one, and every local DB is reproducible. (I14's anti-arbitrage simulation, `services/api/tests/core/sim.py`, is a separate, self-contained seeded market generator used only by the test suite — it does not go through `ax fake-history`.)
 
 The honest answer to cold start is still the phase ordering: Phase 1 ships in week one, so by the time Phase 5 lands there are 6+ weeks of *real* snapshots. **The fake-history tool is for dev speed and must never be used for production display.**
 
@@ -465,7 +510,7 @@ The honest answer to cold start is still the phase ordering: Phase 1 ships in we
 - **P1** — Trigger the Action manually via `workflow_dispatch`; confirm `metric_snapshots` gains ~200 rows. Run it twice and confirm the row count is unchanged (I12 in production). Check again 24h later, unattended.
 - **P2** — `uv run pytest` green, coverage ≥90% on `core/`. Run `ax backtest` and eyeball the index series for plausibility — do known-growing artists actually score higher?
 - **P3** — Query `index_snapshots` for real dates; plot fair value for a few artists and sanity-check direction against what you know about those artists. **Confirm some artists' fair values went DOWN** — that's the real-world I8 check.
-- **P4** — Run the signup → buy → portfolio → sell script; verify the round trip loses ~1.5% and `SELECT * FROM v_balances` matches `balance_cache`.
+- **P4** — Run the signup → buy → portfolio → sell script; verify the round trip loses ~2% (`TRADE_FEE_BPS = 100` each leg, retuned in Phase 2) and `SELECT * FROM v_balances` matches `balance_cache`.
 - **P5** — Use `/run` to launch the app and click through it; then have one real friend sign up and trade unattended, and watch where they hesitate.
 - **P6** — `pnpm e2e` green; leaderboards populate from `ax simulate-trades` data.
 
