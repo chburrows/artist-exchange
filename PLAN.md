@@ -34,7 +34,7 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 - [x] **Phase 1** — Schema, snapshotter — *deployed to Railway 2026-07-19; unattended cron confirmed 2026-07-19 (schedule-trigger run, 200/200 artists, 400 rows upserted, `max(fetched_at)` 09:01 UTC verified in prod DB)*
 - [x] **Phase 2** — Pure core + invariant tests — *I1–I11, I13–I15 green (I12 already covered by Phase 1); 99.65% coverage on `ax.core`; `ax backtest` replays the committed fixture; `TRADE_FEE_BPS` retuned 75→100 bps after the I14 sim (see "As built" below)*
 - [x] **Phase 3** — Index + reversion on real data — *`jobs/recompute.py` + `/internal/jobs/recompute` + `ax recompute`, appended to the nightly Action after `snapshot`; oracle-manipulation quarantine (ratio-divergence + percentile-move, both human-cleared) implemented and covered by 17 new integration tests against real Postgres; 150 tests green, 99.67% coverage on `ax.core`. **Not yet verified against real accumulated data** — Railway deploy and this Phase 3 work landed the same UTC day, so production has one day of `metric_snapshots`, not the weeks `MIN_SNAPSHOTS_TO_LIST`/real-volatility verification needs (see "As built" below)*
-- [ ] **Phase 4** — Auth, trading, portfolio API
+- [x] **Phase 4** — Auth, trading, portfolio API — *claim-a-username + session cookie + magic-link recovery (Resend), `POST /trades/quote`+`POST /trades` under a fixed `balance_cache`-then-artist `FOR UPDATE` lock order, `GET /artists`/`{slug}`/`{slug}/history`, `GET /portfolio`, `jobs/reconcile.py` rebuilding both caches from the ledger nightly; `jobs/recompute.py` retrofitted with the same artist-row lock. 212 tests green, 99.68% coverage on `ax.core`; local smoke test against the real dev DB confirmed a ~2% fee-driven round-trip loss (see "As built" below)*
 - [ ] **Phase 5** — The SPA
 - [ ] **Phase 6** — Leaderboards, discovery, polish
 
@@ -357,6 +357,59 @@ Claim-a-username → session cookie → `STARTING_BALANCE_CENTS` `GRANT` ledger 
 **`slope_microcents_per_share` is set per artist at listing time in this phase** — Phase 2's simulation validated the fixed-slope formula (`FAIR_VALUE_BASE_CENTS * 1_000_000 / AMM_DEPTH_SHARES`) only across a simulated `[50, 5_000]`-cent fair-value band with one platform-wide constant. Real listed artists will span a wider range (`FAIR_VALUE_MIN_CENTS = 1` cent up to whatever a top blue-chip scores). Confirm the fixed-slope assumption — and therefore the slippage/impact guardrails it feeds — holds reasonably at both ends of the real range before trusting it unmodified; if a score-1 artist or a runaway blue-chip behaves oddly under the AMM, a per-tier or per-artist slope is the fix, not a global constant change.
 
 **Done when:** a shell script runs signup → quote → buy → portfolio → sell → portfolio and shows the expected fee-driven round-trip loss.
+
+### As built
+
+`api/routers/{auth,trades,artists,portfolio}.py`, `jobs/reconcile.py` + `/internal/jobs/reconcile` + `ax reconcile` (appended as a third nightly-workflow step, after `recompute`), `core/auth.py` (pure token hashing/TTL math), `providers/email.py` (Resend), and a new migration (`v_balances`/`v_positions` views, `magic_links.user_id`). 212 tests green, 99.68% coverage on `ax.core` against the 90% gate. Verified against the real dev DB, not just the integration suite: a manually-listed artist, signed up over real HTTP with cookies, round-tripped a 5-share buy/sell for a ~2.04% loss (102 cents on a 5,005-cent trade) — `TRADE_FEE_BPS = 100` on both legs plus the AMM's own slippage, exactly PLAN.md's "Done when" claim.
+
+Two decisions confirmed with the user before implementation, since both touch external services and secrets:
+
+- **Magic-link delivery is a real ESP (Resend), not a logged link.** `RESEND_API_KEY` + `EMAIL_FROM_ADDRESS` (defaulting to Resend's zero-setup sandbox sender, which only delivers to the account owner's own inbox — swap in a verified domain before this needs to reach real users) join `SESSION_SECRET` et al. in `services/api/.env`. `providers/email.py` mirrors `providers/base.py`'s shape (a `Protocol` + one concrete implementation behind a FastAPI dependency) so auth tests substitute a fake and never touch the network or spend quota.
+
+Decisions and surprises worth carrying forward:
+
+- **`magic_links` gained a `user_id` column, a deliberate deviation from PLAN.md's literal `(id, email, token_hash, expires_at, used_at)` schema** — the same category of departure as `price_history`'s surrogate key. Without it, "attach a new email" would have to write `users.email` before the link is clicked (or resolve the target user by looking up `email` at consume time), which lets an attacker pre-claim a victim's real address on the attacker's own account; the victim's own later recovery request for that address would then log them into the attacker's account. Binding `user_id` at link-creation time — the current session for an attach, a lookup-by-email for a recovery request — means a link is always "log in as this specific user," and only consuming it ever writes `users.email`. See `db/models.py`'s `MagicLink` docstring.
+- **`POST /trades` is two endpoints, not one.** PLAN.md's summary ("`POST /trades` quotes then executes") described the internal quote-then-commit shape, but the "Done when" script's own "signup → quote → buy" sequence needs a real preview step a client can call without committing anything — so `POST /trades/quote` (read-only, no lock) and `POST /trades` (the real thing, under lock) are separate routes. The quote is necessarily best-effort: state can move between preview and execution, same as any live market.
+- **Lock order is `balance_cache` row, then the artist row — not just the artist row PLAN.md's retrofit note anticipated.** A single-lock design (artist only) leaves the overdraft check racy: a user trading two *different* artists concurrently could have both requests read the same pre-trade cash, both pass the check independently, and jointly overdraw the account, since neither trade's artist-row lock has anything to do with the other. Locking the user's own `balance_cache` row first closes this — two different users never contend on it (different rows) and the same user trading two different artists always contends on it (the same row), so a fixed order can't deadlock against the per-artist lock. `MAX_ARTIST_EXPOSURE_BPS`, in contrast, is checked against a best-effort, unlocked mark-to-market of the user's other positions — a soft guardrail intentionally not worth serializing a user's entire trading history behind.
+- **`jobs/recompute.py`'s retrofit locks per-artist, right before that artist's own mutation** (`session.refresh(artist, with_for_update=True)`), not once for the whole ~200-artist cross-section — holding every row lock for the full computation would serialize trades against the nightly job for no reason, since only the subset actually being listed or reverted needs one. `net_supply` for the reversion gap calculation still comes from a batched pre-loop read, not a fresh query under that lock; a trade committing in the narrow window between them leaves that night's gap measurement one trade stale. Bounded and self-correcting (next night's reversion sees the true current gap) — the same category of accepted risk Phase 3 already documented for quarantine-baseline pollution, not a ledger-correctness issue.
+- **`jobs/reconcile.py` replays the ledger through the real `ax.core.ledger.apply_buy`/`apply_sell`, not a SQL aggregate**, because `avg_cost_microcents` and `realized_pnl_cents` are order-dependent — `v_positions` (the migration's new view) covers only `SUM(share_delta)`, which is why it exists as a `shares`-only view rather than the fuller thing its name might suggest. `v_balances`, a plain `SUM(cash_delta_cents)`, has no such gap and is queried directly.
+- **The first fee-pairing implementation was wrong, and the bug was real, not a test artifact — the test that caught it exercises a case production can hit too.** BUY/SELL rows were matched to their paired FEE row by `(artist_id, created_at)`, reasoning that both are written in the same DB transaction and therefore share the identical `now()` (CLAUDE.md rule 9). That's true, but *any two trades that happen to share a DB transaction* also share that same `now()` — which every trade in one integration test does (the shared-savepoint session fixture never really commits between calls), and which nothing rules out for a future batch-trading tool run inside one transaction. The `(artist_id, created_at)` dict silently let a later trade's FEE overwrite an earlier one's in the lookup, corrupting the replayed cost basis. Fixed by matching structurally instead: `write_entries` always writes a trade's FEE row immediately after its BUY/SELL leg in the same flush, so pairing by adjacency in `(created_at, id)` order is correct regardless of how many trades share a transaction. Caught by `test_no_drift_after_a_clean_trade_history` — a "nothing should be reported" test, which is exactly the shape of test worth trusting when it fails unexpectedly.
+- **`slope_microcents_per_share` was already being set at listing time before this phase started** — Phase 3's `jobs/recompute.py._apply_market_state` does it on first listing, not something newly added here as PLAN.md's original phase text anticipated. Nothing to change; the fixed-slope-range caveat from that phase still stands unverified against a real wide fair-value spread, since production has no listed artists yet (see Phase 3's "As built").
+
+### Deploying this phase (Railway + Resend)
+
+Not yet deployed as of this writing — this is what deploying it requires, so the step isn't rediscovered from scratch later. `RESEND_API_KEY` and the verified sending domain are ready; setting the two Railway variables below and redeploying is what's left. Unlike Phase 1's Railway deploy notes above, there is no "as built" gotcha list here yet; add one when this actually ships.
+
+**Resend account** — done:
+
+1. Signed up at [resend.com](https://resend.com); the free tier is enough for this product's volume (transactional magic-link emails only, no marketing send).
+2. `RESEND_API_KEY` created from the dashboard's **API Keys** page.
+3. `artistexchange.chburrows.com` verified as a sending domain (SPF/DKIM), so delivery is not limited to the sandbox sender's "only the Resend account owner's own inbox" restriction. `EMAIL_FROM_ADDRESS` is `Artist Exchange <noreply@artistexchange.chburrows.com>`.
+
+**New Railway variables on the `api` service** (in addition to everything Phase 1 already lists — `DATABASE_URL`, `LASTFM_API_KEY`, `LASTFM_SHARED_SECRET`, `INTERNAL_JOB_TOKEN`, `SESSION_SECRET`, `ENVIRONMENT`, `WEB_ORIGIN`):
+
+| Variable | Value | Notes |
+|---|---|---|
+| `RESEND_API_KEY` | from the Resend dashboard | required — `get_email_provider` (`api/deps.py`) returns 503 on every `/auth/email` and `/auth/magic-link` call if this is unset, same fail-closed shape as a missing `LASTFM_API_KEY` |
+| `EMAIL_FROM_ADDRESS` | `Artist Exchange <noreply@artistexchange.chburrows.com>` | verified domain — delivers to any address, not just the operator's own Resend account inbox |
+
+`SESSION_SECRET` already exists from Phase 1's variable list but is genuinely load-bearing starting this phase: it's the HMAC key every session and magic-link token is hashed with (`ax.core.auth.hash_token`), not just a cookie-signing placeholder. Rotating it invalidates every live session and every unconsumed magic link — expected, not a bug, if it's ever intentionally rotated.
+
+**No new GitHub Actions secrets.** `jobs/reconcile.py`'s nightly step (`.github/workflows/nightly-snapshot.yml`) reuses the existing `INTERNAL_JOB_TOKEN` and `API_BASE_URL`.
+
+**`WEB_ORIGIN` is now also where magic links point** (`{WEB_ORIGIN}/auth/verify?token=...`), not just the CORS origin — that route doesn't exist until Phase 5 builds the SPA, so magic links are consumable via a direct `GET {API_BASE_URL}/auth/magic-link/consume?token=...` call in the meantime (what the Phase 4 verification steps below do), not by clicking the link as a real user would.
+
+**Verifying the deploy**, once the variables above are set and the api service has redeployed:
+
+```bash
+# /auth/email requires a session cookie (it's "attach email to my account"),
+# so use /auth/magic-link for an anonymous check — it takes no session and
+# always replies 202 regardless of whether the address has an account.
+# Should be 503 until RESEND_API_KEY is set, then 202.
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$API_BASE_URL/auth/magic-link" \
+  -H 'content-type: application/json' -d '{"email":"you@example.com"}'
+```
+A signup → email-attach → check-inbox → consume round trip against the deployed `API_BASE_URL` (mirroring the local curl sequence in the Phase 4 verification steps) is the real confirmation — with the domain verified, this can be run against any real inbox, not just the Resend account owner's own.
 
 ---
 

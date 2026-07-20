@@ -1,11 +1,11 @@
 """`ax` — local development and operations CLI.
 
 Phase 1 shipped `seed-artists` and `snapshot`; Phase 2 added `backtest`;
-Phase 3 adds `recompute`. The remaining commands CLAUDE.md documents
-(`fake-history`, `simulate-trades`, `reset`) arrive with the phases that
-give them something to do — a stub that prints "not implemented" is
-worse than an honest absence, because it looks like a working command in
-`--help`.
+Phase 3 added `recompute`; Phase 4 adds `reconcile`. The remaining
+commands CLAUDE.md documents (`fake-history`, `simulate-trades`, `reset`)
+arrive with the phases that give them something to do — a stub that
+prints "not implemented" is worse than an honest absence, because it
+looks like a working command in `--help`.
 """
 
 import csv
@@ -29,6 +29,7 @@ from ax.core.index import (
 from ax.db.models import Artist, MetricSnapshot
 from ax.db.session import session_scope
 from ax.jobs.recompute import run_recompute
+from ax.jobs.reconcile import run_reconcile
 from ax.jobs.snapshot import run_snapshot
 from ax.logging_config import configure_third_party_logging
 from ax.providers.lastfm import LastfmProvider
@@ -163,6 +164,20 @@ def recompute(
 
     with session_scope() as session:
         result = run_recompute(session, as_of_date, now=datetime.now(UTC))
+
+    typer.echo(json.dumps(result.summary(), indent=2))
+
+
+@app.command("reconcile")
+def reconcile() -> None:
+    """Run the cache reconciliation job locally, without HTTP.
+
+    Same code path `/internal/jobs/reconcile` uses: rebuilds
+    `balance_cache`/`position_cache` from `transactions` for every user
+    and overwrites any row that has drifted.
+    """
+    with session_scope() as session:
+        result = run_reconcile(session, now=datetime.now(UTC))
 
     typer.echo(json.dumps(result.summary(), indent=2))
 

@@ -9,7 +9,7 @@ accumulating history, which is the one thing that cannot be hurried later.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ax.api.routers import internal
+from ax.api.routers import artists, auth, internal, portfolio, trades
 from ax.logging_config import configure_third_party_logging
 from ax.settings import get_settings
 
@@ -41,6 +41,10 @@ app.add_middleware(
 )
 
 app.include_router(internal.router)
+app.include_router(auth.router)
+app.include_router(trades.router)
+app.include_router(artists.router)
+app.include_router(portfolio.router)
 
 
 @app.get("/health", tags=["meta"])

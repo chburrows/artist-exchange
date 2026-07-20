@@ -2,15 +2,29 @@
 
 import secrets
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session as DbSession
 
+from ax.core.auth import hash_token
+from ax.db.models import Session as SessionModel
+from ax.db.models import User
+from ax.db.session import get_db
 from ax.providers.base import MetricProvider, ProviderAuthError
+from ax.providers.email import EmailAuthError, EmailProvider, ResendEmailProvider
 from ax.providers.lastfm import LastfmProvider
 from ax.settings import Settings, get_settings
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+# Shared with api/routers/auth.py, which is the only other place that
+# reads or writes this cookie.
+SESSION_COOKIE_NAME = "ax_session"
+
+DbDep = Annotated[DbSession, Depends(get_db)]
 
 
 def get_metric_provider(settings: SettingsDep) -> Iterator[MetricProvider]:
@@ -39,6 +53,27 @@ def get_metric_provider(settings: SettingsDep) -> Iterator[MetricProvider]:
 
 
 MetricProviderDep = Annotated[MetricProvider, Depends(get_metric_provider)]
+
+
+def get_email_provider(settings: SettingsDep) -> Iterator[EmailProvider]:
+    """The channel magic links go out on. A dependency for the same
+    reason `get_metric_provider` is: auth routes' tests substitute a fake
+    and exercise signup/attach/recovery without a real network call."""
+    try:
+        provider = ResendEmailProvider(settings.resend_api_key, settings.email_from_address)
+    except EmailAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        yield provider
+    finally:
+        provider.close()
+
+
+EmailProviderDep = Annotated[EmailProvider, Depends(get_email_provider)]
 
 
 def require_job_token(
@@ -77,3 +112,50 @@ def require_job_token(
             detail="invalid or missing bearer token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def require_session_secret(settings: SettingsDep) -> bytes:
+    """The HMAC key every session/magic-link token is hashed with
+    (`ax.core.auth.hash_token`). Same "refuse, don't silently degrade"
+    shape as `require_job_token`: an unset secret must not quietly hash
+    every token under an empty key."""
+    if not settings.session_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SESSION_SECRET is not configured",
+        )
+    return settings.session_secret.encode("utf-8")
+
+
+SessionSecretDep = Annotated[bytes, Depends(require_session_secret)]
+
+
+def get_current_user(
+    db: DbDep,
+    session_secret: SessionSecretDep,
+    ax_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
+) -> User:
+    """Resolves the session cookie to its user. 401 on anything short of a
+    live, unrevoked, unexpired session — a missing cookie and a garbage
+    one get the same response, so neither leaks which case it was."""
+    if not ax_session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+
+    token_hash = hash_token(session_secret, ax_session)
+    now = datetime.now(UTC)
+    stmt = (
+        select(User)
+        .join(SessionModel, SessionModel.user_id == User.id)
+        .where(
+            SessionModel.token_hash == token_hash,
+            SessionModel.revoked_at.is_(None),
+            SessionModel.expires_at > now,
+        )
+    )
+    user = db.scalars(stmt).one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+    return user
+
+
+CurrentUserDep = Annotated[User, Depends(get_current_user)]

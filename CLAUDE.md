@@ -38,12 +38,13 @@ uv run ax snapshot --limit 5  # smoke-test against live Last.fm, cheaply
 uv run ax backtest            # replay a metrics CSV through the real index pipeline
 uv run ax backtest --artist breakout  # filter to one artist's full series
 uv run ax recompute           # run the index recompute + reversion job locally
+uv run ax reconcile           # rebuild balance_cache/position_cache from the ledger locally
 
 # Not built yet — they arrive with the phase that needs them. A stub that
 # prints "not implemented" would be worse than an honest absence.
-uv run ax reset               # Phase 4
-uv run ax fake-history --days 120 --seed 42   # Phase 4
-uv run ax simulate-trades --users 50 --days 120  # Phase 4
+uv run ax reset               # Phase 5
+uv run ax fake-history --days 120 --seed 42   # Phase 5
+uv run ax simulate-trades --users 50 --days 120  # Phase 5
 
 pnpm dev                      # Next.js dev server
 pnpm build                    # static export
@@ -78,7 +79,7 @@ These are rules, not preferences. Violating one is a bug even if tests pass.
 5. **Every index input is a cross-sectional z-score of a growth rate, never a level.** See rule-behind-the-rule in Gotchas.
 6. **Rounding always favors the market.** Buys round up, sells round down. Every round trip must be strictly lossy.
 7. **Job endpoints are idempotent** on `(artist_id, as_of_date)`. Re-running a job must never double-write or append a ledger row.
-8. **Balances and positions are derived from the ledger.** `v_balances` / `v_positions` are the definition of truth; `balance_cache` / `position_cache` are written in the *same DB transaction* as the ledger append, under `SELECT ... FOR UPDATE` on the artist row. Never update a cache independently.
+8. **Balances and positions are derived from the ledger.** `v_balances` / `v_positions` are the definition of truth; `balance_cache` / `position_cache` are written in the *same DB transaction* as the ledger append, under `SELECT ... FOR UPDATE` on both the user's `balance_cache` row and the artist row — **balance_cache locked first, always** (see Gotchas). Never update a cache independently.
 9. **Never timestamp an event inside a locked transaction with `now()`.** Use `clock_timestamp()`. `now()` is frozen at transaction start, so under lock contention it records queue time, not execution time — see Gotchas.
 
 ## Gotchas
@@ -89,6 +90,7 @@ These are rules, not preferences. Violating one is a bug even if tests pass.
 - **Reversion moves only the anchor.** No user's shares or cash change during reversion. This keeps the ledger clean and makes the job trivially idempotent.
 - **The AMM guardrails do not defend the oracle.** Fees, slippage caps, and position caps stop someone arbitraging the *gap* between price and fair value. They do nothing against someone who inflates Last.fm scrobbles to move **fair value itself**. That's what the ratio-divergence flag, index quarantine, and review queue in Phase 3 are for — see `PLAN.md`. Never remove those as "unnecessary complexity," and never treat a private repo as a substitute for them.
 - **`ax fake-history` is dev-only.** It must never be run against production or surfaced as real data.
+- **Lock order for anything touching money is fixed: the user's `balance_cache` row, then the artist row — never the reverse.** A trade needs both (cash for the overdraft check, the artist row for supply/price). Locking the artist row alone leaves the overdraft check racy: a user trading two *different* artists concurrently could have both requests read the same pre-trade cash and jointly overdraw the account. `balance_cache` first closes this without risking deadlock, because the only way either lock is shared between two concurrent trades is along its own axis (two users never share a `balance_cache` row; one user trading two artists never shares an artist row). Any new code path that locks both must follow this same order.
 - **Talent Scout depends on denormalized columns.** `transactions.index_score_at_trade` and `fair_value_cents_at_trade` are written at trade time and are immutable history — recomputing them later from snapshots would be both slow and wrong.
 - **Right of publicity**: every artist page carries a "not affiliated with or endorsed by" disclaimer, and v1 uses generated geometric avatars, not artist photography.
 - **Last.fm reports "artist not found" as HTTP 200** with `{"error": 6}` in the body. Always parse the body before trusting the status code, or the job records garbage as a real observation.

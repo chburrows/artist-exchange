@@ -116,14 +116,53 @@ jobs:
           echo "All 3 attempts failed."
           exit 1
 
+      - name: POST /internal/jobs/reconcile
+        id: reconcile
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          INTERNAL_JOB_TOKEN: ${{ secrets.INTERNAL_JOB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          url="${API_BASE_URL%/}/internal/jobs/reconcile"
+
+          # Same retry/backoff shape as the steps above. Re-running is
+          # always safe: this job only ever overwrites a cache row with
+          # a value freshly rebuilt from `transactions`, the ledger --
+          # running it twice in a row rebuilds the same truth twice.
+          for attempt in 1 2 3; do
+            echo "Attempt ${attempt}: POST ${url}"
+
+            if curl --fail-with-body --silent --show-error \
+                    --max-time 600 \
+                    --request POST \
+                    --header "Authorization: Bearer ${INTERNAL_JOB_TOKEN}" \
+                    "${url}" | tee response.json; then
+              echo
+              echo "Reconcile succeeded on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Attempt ${attempt} failed."
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+
+          echo "All 3 attempts failed."
+          exit 1
+
       - name: Report failure
         if: failure()
         run: |
-          echo "::error title=Nightly snapshot/recompute failed::\
+          echo "::error title=Nightly snapshot/recompute/reconcile failed::\
           The nightly pipeline did not complete. If the snapshot step \
           failed: Last.fm has no history API, so this day cannot be \
           backfilled from upstream. If recompute failed after a \
           successful snapshot: the raw metrics are safely stored, only \
-          index_snapshots/price_history for this date are stale. Either \
-          way, re-run this workflow via workflow_dispatch as soon as \
-          possible — re-runs are safe."
+          index_snapshots/price_history for this date are stale. If \
+          reconcile failed: balance_cache/position_cache may be stale \
+          until the next successful run, but transactions (the ledger \
+          itself) is untouched either way. Re-run this workflow via \
+          workflow_dispatch as soon as possible — every step is safe to \
+          re-run."

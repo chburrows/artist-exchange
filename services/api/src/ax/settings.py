@@ -37,9 +37,16 @@ class Settings(BaseSettings):
     lastfm_api_key: str = ""
     lastfm_shared_secret: str = ""
 
+    resend_api_key: str = ""
+    # Resend's shared sandbox sender. Works with zero setup but Resend
+    # restricts it to the account owner's own inbox — swap in a verified
+    # custom domain address before this needs to reach real users.
+    email_from_address: str = "Artist Exchange <onboarding@resend.dev>"
+
     # Bearer token for /internal/jobs/*. Empty is refused at request time
     # rather than at import time, so tests and `--help` still work without it.
     internal_job_token: str = ""
+    # HMAC key for session/magic-link token hashing (ax.core.auth.hash_token).
     session_secret: str = ""
 
     environment: Literal["local", "test", "production"] = "local"

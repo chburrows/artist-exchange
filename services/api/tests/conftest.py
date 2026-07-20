@@ -24,8 +24,9 @@ patching the name afterwards has no effect on an already-built route.
 """
 
 import os
+import re
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from alembic import command
@@ -36,11 +37,13 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from ax.api.deps import get_metric_provider
+from ax.api.deps import get_email_provider, get_metric_provider
 from ax.api.main import app
-from ax.db.models import Artist
+from ax.core.amm import listing_slope_uc
+from ax.db.models import Artist, IndexSnapshot, PriceHistory
 from ax.db.session import get_db
 from ax.providers.base import ArtistRef, MetricValue, ProviderNotFound
+from ax.providers.email import EmailMessage, EmailSendError
 from ax.settings import Settings, get_settings
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -177,6 +180,36 @@ def provider() -> FakeProvider:
     return FakeProvider()
 
 
+class FakeEmailProvider:
+    """In-memory `EmailProvider`. Records every send so a test can pull
+    the magic-link token straight out of the rendered HTML instead of
+    reading email, or make a provider fail to exercise the 502 path."""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.sent: list[EmailMessage] = []
+
+    def send(self, message: EmailMessage) -> None:
+        if self.fail:
+            raise EmailSendError("simulated provider failure")
+        self.sent.append(message)
+
+    def last_link(self) -> str:
+        """Pulls the `?token=...` URL out of the most recent message's
+        HTML body -- the test-side equivalent of clicking the email."""
+        match = re.search(r'href="([^"]+)"', self.sent[-1].html)
+        assert match, "no link found in last sent email"
+        return match.group(1)
+
+    def last_token(self) -> str:
+        return self.last_link().rsplit("token=", 1)[-1]
+
+
+@pytest.fixture
+def email_provider() -> FakeEmailProvider:
+    return FakeEmailProvider()
+
+
 @pytest.fixture
 def test_settings() -> Settings:
     """Explicit settings, independent of whatever is in the developer's
@@ -185,16 +218,21 @@ def test_settings() -> Settings:
         database_url=TEST_DATABASE_URL,
         lastfm_api_key="test-key",
         internal_job_token=TEST_JOB_TOKEN,
+        session_secret="test-session-secret",
         environment="test",
     )
 
 
 @pytest.fixture
 def client(
-    session: Session, provider: FakeProvider, test_settings: Settings
+    session: Session,
+    provider: FakeProvider,
+    email_provider: FakeEmailProvider,
+    test_settings: Settings,
 ) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = lambda: session
     app.dependency_overrides[get_metric_provider] = lambda: provider
+    app.dependency_overrides[get_email_provider] = lambda: email_provider
     app.dependency_overrides[get_settings] = lambda: test_settings
     try:
         yield TestClient(app)
@@ -238,3 +276,57 @@ def make_artist(session: Session) -> ArtistFactory:
 @pytest.fixture
 def auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {TEST_JOB_TOKEN}"}
+
+
+ListArtist = Callable[..., Artist]
+
+
+@pytest.fixture
+def list_artist(session: Session) -> ListArtist:
+    """Puts an already-created artist into the listed, tradable state --
+    the same fields `jobs/recompute.py._apply_market_state`'s listing
+    branch sets, plus the `IndexSnapshot` and `PriceHistory('listing')`
+    rows that normally accompany it -- without running the real index
+    pipeline. Trade-route tests care about the AMM/ledger mechanics, not
+    re-deriving a score from synthetic metric snapshots."""
+
+    def _list(
+        artist: Artist,
+        *,
+        fair_value_cents: int = 1_000,
+        index_score: float = 50.0,
+        as_of: date | None = None,
+        now: datetime | None = None,
+    ) -> Artist:
+        now = now or datetime.now(UTC)
+        as_of = as_of or now.date()
+
+        artist.slope_microcents_per_share = listing_slope_uc()
+        artist.anchor_cents = fair_value_cents
+        artist.anchor_target_cents = fair_value_cents
+        artist.glide_start_at = now
+        artist.glide_end_at = now
+        artist.listed_at = now
+
+        session.add(
+            IndexSnapshot(
+                artist_id=artist.id,
+                as_of_date=as_of,
+                index_score=index_score,
+                fair_value_cents=fair_value_cents,
+                components={"v": 1},
+            )
+        )
+        session.add(
+            PriceHistory(
+                artist_id=artist.id,
+                market_price_cents=fair_value_cents,
+                fair_value_cents=fair_value_cents,
+                net_supply=0,
+                source="listing",
+            )
+        )
+        session.flush()
+        return artist
+
+    return _list

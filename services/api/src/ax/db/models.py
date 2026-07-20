@@ -71,9 +71,30 @@ class Session(Base):
 
 
 class MagicLink(Base):
+    """PLAN.md's schema is `(id, email, token_hash, expires_at, used_at)` —
+    this adds `user_id`, a deliberate deviation, for the same reason
+    `price_history` deviated from its own PLAN.md spec (see that class).
+
+    Without `user_id`, consuming a link would have to resolve the target
+    user by looking up `email` against `users.email` at consume time. That
+    makes "attach a new email" unsafe: a link is issued for an address
+    before it's proven to belong to the requester, so if attach wrote
+    `users.email` immediately, an attacker could pre-claim a victim's real
+    address on the attacker's own account. The victim, later requesting
+    their *own* password-less recovery for that address, would receive a
+    link that logs them into the attacker's account instead.
+
+    Binding `user_id` at link-creation time (always the account the link
+    is *for*, chosen server-side — the current session for an attach
+    request, or a lookup-by-email for a recovery request) removes the
+    ambiguity: consuming a link always logs in as that specific user, and
+    only then, having proven mailbox control, stamps `users.email`.
+    """
+
     __tablename__ = "magic_links"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     email: Mapped[str] = mapped_column(CITEXT, index=True)
     token_hash: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
     expires_at: Mapped[datetime]

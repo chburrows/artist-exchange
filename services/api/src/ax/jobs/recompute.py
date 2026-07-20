@@ -35,10 +35,20 @@ auto-clear and, as of Phase 3, no clearing UI, only direct DB access.
 **PLAN.md follow-up: surface `flagged_artists` in an admin view in a
 later phase rather than relying on direct DB access indefinitely.**
 
-`SELECT ... FOR UPDATE` on the artist row is deliberately not taken here:
-no concurrent writer exists yet (Phase 4 has not landed). The trade
-route Phase 4 adds will need one, and this job should switch to the same
-lock at that point -- see CLAUDE.md rule 8.
+**`SELECT ... FOR UPDATE` on the artist row, retrofitted in Phase 4.**
+`POST /trades` (`api/routers/trades.py`) is now a concurrent writer of
+`anchor_cents`/`anchor_target_cents`/`glide_start_at`/`glide_end_at`/
+`net_supply`-derived state on the same `artists` row this job mutates in
+`_apply_market_state` -- without a lock, a nightly reversion and an
+in-flight trade could race on those columns. `_apply_market_state` takes
+the lock (via `session.refresh(artist, with_for_update=True)`) itself,
+right before its first write, rather than up front for every artist in
+the cross-section: only the subset actually being listed or reverted
+needs it, and holding ~200 row locks for the full duration of the
+cross-sectional computation would serialize trades against this job for
+no reason. `POST /trades` locks its own artist row first, so the two
+writers always contend on the same single row-level lock, never a
+larger set -- no additional lock-ordering rule is needed between them.
 """
 
 import logging
@@ -430,6 +440,15 @@ def _apply_market_state(
         # Idempotent by construction: a same-`as_of_date` retry finds
         # `listed_at` already set and takes the reversion branch instead
         # (itself idempotent -- see below), never re-listing.
+        #
+        # Locked here, not at the top of the function: an artist about to
+        # be listed for the first time cannot already be `POST /trades`'s
+        # target (it isn't tradable until `listed_at` is set), so this
+        # acquisition can't contend with a real trade -- it exists purely
+        # so a concurrent reader elsewhere taking the same lock convention
+        # sees a consistent row, not because a race is actually possible
+        # on a first listing.
+        session.refresh(artist, with_for_update=True)
         slope_uc = listing_slope_uc()
         artist.slope_microcents_per_share = slope_uc
         artist.anchor_cents = fair_value_cents
@@ -463,6 +482,22 @@ def _apply_market_state(
     # same-day run.)
     if already_processed_today:
         return
+
+    # Locked here, right before the read this job's own write depends
+    # on -- the same row `POST /trades` locks before mutating supply and
+    # reading these same anchor/glide columns for pricing. Either writer
+    # reaching the row first makes the other block until it commits, so
+    # this job never reverts an artist using an anchor/glide state a
+    # concurrent trade is mid-write on. `net_supply` below still comes
+    # from the batched pre-loop read (`_net_supplies`), not a fresh
+    # per-artist query under this lock -- a trade committing in the
+    # narrow window between that batch read and this lock can leave the
+    # reversion's gap measurement using a supply figure that's already
+    # one trade stale. Bounded and self-correcting (the next night's
+    # reversion measures the true current gap), not a ledger-correctness
+    # issue -- the same category of accepted staleness as the Phase 3
+    # quarantine-baseline note above.
+    session.refresh(artist, with_for_update=True)
 
     assert artist.anchor_cents is not None
     assert artist.anchor_target_cents is not None

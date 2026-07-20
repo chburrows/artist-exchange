@@ -38,10 +38,12 @@ uv run ax reset                       # migrate + seed + fake history + simulate
 | `DATABASE_URL` | local: `postgresql+psycopg://postgres:postgres@localhost:5432/artist_exchange` | Railway injects this in production |
 | `LASTFM_API_KEY` | `secrets.env` | |
 | `LASTFM_SHARED_SECRET` | `secrets.env` | not needed for `artist.getInfo`, but keep them together |
+| `RESEND_API_KEY` | [resend.com](https://resend.com) dashboard → API Keys | magic-link email delivery |
+| `EMAIL_FROM_ADDRESS` | `Artist Exchange <noreply@artistexchange.chburrows.com>` | domain is verified in Resend (SPF/DKIM), so this delivers to any address — no sandbox restriction |
 | `INTERNAL_JOB_TOKEN` | generate: `openssl rand -hex 32` | bearer token for `/internal/jobs/*` |
-| `SESSION_SECRET` | generate: `openssl rand -hex 32` | signs session cookies |
-| `ENVIRONMENT` | `local` \| `test` \| `production` | |
-| `WEB_ORIGIN` | `http://localhost:3000` locally; the Railway web URL in production | the single allowed CORS origin |
+| `SESSION_SECRET` | generate: `openssl rand -hex 32` | HMAC key for session/magic-link token hashing (`ax.core.auth.hash_token`) |
+| `ENVIRONMENT` | `local` \| `test` \| `production` | also controls the session cookie's `Secure`/`SameSite` flags — see `api/routers/auth.py` |
+| `WEB_ORIGIN` | `http://localhost:3000` locally; the Railway web URL in production | the single allowed CORS origin, and the base URL magic links point at |
 
 ### `apps/web/.env.local`
 
@@ -86,6 +88,8 @@ right, then set these variables:
 | `DATABASE_URL` | reference the Postgres service's variable |
 | `LASTFM_API_KEY` | from `secrets.env` |
 | `LASTFM_SHARED_SECRET` | from `secrets.env` |
+| `RESEND_API_KEY` | from the Resend dashboard |
+| `EMAIL_FROM_ADDRESS` | `Artist Exchange <noreply@artistexchange.chburrows.com>` — domain is already verified in Resend |
 | `INTERNAL_JOB_TOKEN` | `openssl rand -hex 32` — keep this value, GitHub needs it too |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `ENVIRONMENT` | `production` |

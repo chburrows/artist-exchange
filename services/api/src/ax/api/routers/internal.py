@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from ax.api.deps import MetricProviderDep, require_job_token
 from ax.db.session import get_db
 from ax.jobs.recompute import run_recompute
+from ax.jobs.reconcile import run_reconcile
 from ax.jobs.snapshot import run_snapshot
 
 router = APIRouter(
@@ -78,4 +79,16 @@ def recompute(
     """
     as_of_date = as_of or datetime.now(UTC).date()
     result = run_recompute(session, as_of_date, now=datetime.now(UTC))
+    return result.summary()
+
+
+@router.post("/reconcile", status_code=status.HTTP_200_OK)
+def reconcile(session: DbDep) -> dict[str, Any]:
+    """Rebuild `balance_cache`/`position_cache` from `transactions` for
+    every user and overwrite any row that has drifted. Meant to run last
+    in the nightly Action, after `snapshot` and `recompute` -- there is
+    no `as_of_date` here because reconciliation isn't about one day's
+    data, it checks the whole ledger against the whole cache, as of now.
+    """
+    result = run_reconcile(session, now=datetime.now(UTC))
     return result.summary()
