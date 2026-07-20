@@ -195,7 +195,9 @@ def artist_listeners(client: httpx.Client, name: str, mbid: str | None) -> dict[
     }
 
 
-def build_blue_chip_pool(client: httpx.Client, pool_size: int) -> tuple[list[dict[str, Any]], set[str]]:
+def build_blue_chip_pool(
+    client: httpx.Client, pool_size: int
+) -> tuple[list[dict[str, Any]], set[str]]:
     """Pull chart pages until `pool_size` candidates clear the listener floor.
 
     Returns the pool sorted by listeners descending, plus the set of
@@ -419,4 +421,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\nInterrupted; no file was written.", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
