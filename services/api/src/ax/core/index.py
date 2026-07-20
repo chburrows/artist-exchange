@@ -18,12 +18,14 @@ Money re-enters only at `fair_value_cents`, an int.
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 from ax.core.config import (
     EWMA_ALPHA,
     FAIR_VALUE_BASE_CENTS,
     FAIR_VALUE_EXPONENT,
     FAIR_VALUE_MIN_CENTS,
+    GROWTH_BASE_WINDOW_DAYS,
     GROWTH_LOOKBACK_DAYS,
     GROWTH_WEIGHT,
     INDEX_MAX,
@@ -65,8 +67,43 @@ class ArtistDayResult:
     components: dict[str, object]  # versioned; goes verbatim into index_snapshots.components
 
 
-def robust_z(values: Sequence[float]) -> list[float]:
-    """Median/MAD z-scores, clamped to +-Z_CLAMP (C4).
+def pick_base_snapshot(
+    dates_to_values: Mapping[date, int], target_day: date
+) -> tuple[int, int] | None:
+    """The base snapshot for `target_day`'s growth rate (C6): prefers the
+    day closest to `GROWTH_LOOKBACK_DAYS` back within
+    `+-GROWTH_BASE_WINDOW_DAYS`, ties broken toward the older (larger-gap)
+    day. Returns `(base_value, gap_days)`, or `None` if no day in the
+    window has data -- the caller's cue that the artist is `warming_up`.
+
+    Shared by `cli.py`'s `ax backtest` and `jobs/recompute.py`, both of
+    which need the identical base-window rule production applies against
+    `metric_snapshots`. Pure (stdlib `date`/`timedelta` only), so it
+    belongs here rather than being duplicated in each caller.
+    """
+    window = range(
+        GROWTH_LOOKBACK_DAYS - GROWTH_BASE_WINDOW_DAYS,
+        GROWTH_LOOKBACK_DAYS + GROWTH_BASE_WINDOW_DAYS + 1,
+    )
+    candidate_offsets = [
+        offset for offset in window if (target_day - timedelta(days=offset)) in dates_to_values
+    ]
+    if not candidate_offsets:
+        return None
+
+    best_offset = min(
+        candidate_offsets, key=lambda offset: (abs(offset - GROWTH_LOOKBACK_DAYS), -offset)
+    )
+    best_day = target_day - timedelta(days=best_offset)
+    return dates_to_values[best_day], best_offset
+
+
+def robust_z(values: Sequence[float], *, clamp: float = Z_CLAMP) -> list[float]:
+    """Median/MAD z-scores, clamped to +-`clamp` (C4). Defaults to
+    +-Z_CLAMP, the score-formula's own bound; callers outside the score
+    path (Phase 3's oracle-manipulation divergence check, which needs to
+    tell "beyond 3 MAD" apart from "clamped at the boundary") pass
+    `clamp=math.inf` for the raw, unclamped z-score instead.
 
     Median/MAD rather than mean/stdev so one viral artist can't compress
     (or blow up) every other artist's z-score. The MAD floor
@@ -90,7 +127,7 @@ def robust_z(values: Sequence[float]) -> list[float]:
     mad = abs_devs[mid] if n % 2 else (abs_devs[mid - 1] + abs_devs[mid]) / 2
     denom = max(mad, ROBUST_Z_MIN_MAD)
 
-    return [_clamp(_ROBUST_Z_SCALE * (v - median) / denom, -Z_CLAMP, Z_CLAMP) for v in values]
+    return [_clamp(_ROBUST_Z_SCALE * (v - median) / denom, -clamp, clamp) for v in values]
 
 
 def fair_value_cents(score: float) -> int:

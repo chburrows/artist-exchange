@@ -13,6 +13,7 @@ from ax.core.money import (
     bps_floor,
     ceil_div,
     cents_to_uc,
+    round_div,
     uc_to_cents_ceil,
     uc_to_cents_floor,
     uc_to_cents_nearest,
@@ -112,3 +113,20 @@ def test_bps_ceil_is_at_least_one_for_any_nonzero_amount(amount: int, bps: int) 
     """Fees must never round to zero on a genuinely nonzero trade (what
     makes I2 -- no round-trip profit -- strict)."""
     assert bps_ceil(amount, bps) >= 1
+
+
+@given(n=nonneg_int, d=pos_divisor)
+def test_round_div_within_half_of_exact(n: int, d: int) -> None:
+    result = round_div(n, d)
+    exact = Fraction(n, d)
+    assert abs(Fraction(result) - exact) <= Fraction(1, 2)
+
+
+def test_round_div_ties_round_up() -> None:
+    assert round_div(5, 2) == 3
+    assert round_div(3, 2) == 2
+
+
+@given(n=nonneg_int, d=pos_divisor)
+def test_round_div_is_exact_when_evenly_divisible(n: int, d: int) -> None:
+    assert round_div(n * d, d) == n

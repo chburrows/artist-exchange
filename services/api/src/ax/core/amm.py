@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from ax.core.config import (
+    AMM_DEPTH_SHARES,
+    FAIR_VALUE_BASE_CENTS,
     MAX_SLIPPAGE_BPS,
     REVERSION_GLIDE_HOURS,
     REVERSION_MAX_MOVE_BPS,
@@ -25,9 +27,11 @@ from ax.core.config import (
     TRADE_FEE_BPS,
 )
 from ax.core.money import (
+    MICROCENTS_PER_CENT,
     bps_ceil,
     ceil_div,
     cents_to_uc,
+    round_div,
     uc_to_cents_ceil,
     uc_to_cents_floor,
     uc_to_cents_nearest,
@@ -69,6 +73,20 @@ class ReversionPlan:
     anchor_target_cents: int
     glide_start_at: datetime
     glide_end_at: datetime
+
+
+def listing_slope_uc() -> int:
+    """The bonding curve's slope in microcents/share (PLAN.md): one
+    platform-wide constant, shared by every artist at listing time,
+    calibrated so the curve moves through `AMM_DEPTH_SHARES` shares for
+    a `FAIR_VALUE_BASE_CENTS`-scale artist. Phase 2's I14 simulation
+    validated this fixed-slope assumption only across a simulated
+    `[50, 5_000]`-cent band -- PLAN.md's Phase 4 note flags confirming it
+    still holds at both ends of the real listed range (a score-1 artist,
+    a runaway blue-chip) before trusting it unmodified; a per-tier or
+    per-artist slope is the fix if not, not a global constant change.
+    """
+    return round_div(FAIR_VALUE_BASE_CENTS * MICROCENTS_PER_CENT, AMM_DEPTH_SHARES)
 
 
 def spot_price_uc(anchor_uc: int, slope_uc: int, net_supply: int) -> int:

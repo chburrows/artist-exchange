@@ -1,16 +1,17 @@
 """`ax` — local development and operations CLI.
 
-Phase 1 shipped `seed-artists` and `snapshot`; Phase 2 adds `backtest`.
-The remaining commands CLAUDE.md documents (`fake-history`,
-`simulate-trades`, `reset`) arrive with the phases that give them
-something to do — a stub that prints "not implemented" is worse than an
-honest absence, because it looks like a working command in `--help`.
+Phase 1 shipped `seed-artists` and `snapshot`; Phase 2 added `backtest`;
+Phase 3 adds `recompute`. The remaining commands CLAUDE.md documents
+(`fake-history`, `simulate-trades`, `reset`) arrive with the phases that
+give them something to do — a stub that prints "not implemented" is
+worse than an honest absence, because it looks like a working command in
+`--help`.
 """
 
 import csv
 import json
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -18,10 +19,16 @@ import typer
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from ax.core.config import GROWTH_BASE_WINDOW_DAYS, GROWTH_LOOKBACK_DAYS
-from ax.core.index import ArtistDayInput, ArtistDayResult, SignalInput, compute_index
+from ax.core.index import (
+    ArtistDayInput,
+    ArtistDayResult,
+    SignalInput,
+    compute_index,
+    pick_base_snapshot,
+)
 from ax.db.models import Artist, MetricSnapshot
 from ax.db.session import session_scope
+from ax.jobs.recompute import run_recompute
 from ax.jobs.snapshot import run_snapshot
 from ax.logging_config import configure_third_party_logging
 from ax.providers.lastfm import LastfmProvider
@@ -139,6 +146,27 @@ def snapshot(
         raise typer.Exit(code=1)
 
 
+@app.command("recompute")
+def recompute(
+    as_of: Annotated[
+        datetime | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Date to recompute (default: today UTC)"),
+    ] = None,
+) -> None:
+    """Run the index recompute + reversion job locally, without HTTP.
+
+    Same code path `/internal/jobs/recompute` uses. Run after `snapshot`
+    for the same date has landed real `metric_snapshots` rows -- this
+    command reads them, it does not fetch anything itself.
+    """
+    as_of_date: date = as_of.date() if as_of else datetime.now(UTC).date()
+
+    with session_scope() as session:
+        result = run_recompute(session, as_of_date, now=datetime.now(UTC))
+
+    typer.echo(json.dumps(result.summary(), indent=2))
+
+
 def _load_metrics_csv(path: Path) -> _MetricSeries:
     """Long-format rows (`artist_slug, as_of_date, source, metric_key,
     value`) grouped by artist and signal key."""
@@ -150,30 +178,6 @@ def _load_metrics_csv(path: Path) -> _MetricSeries:
             as_of = date.fromisoformat(row["as_of_date"])
             series.setdefault(slug, {}).setdefault(signal_key, {})[as_of] = int(row["value"])
     return series
-
-
-def _pick_base_snapshot(
-    dates_to_values: dict[date, int], target_day: date
-) -> tuple[int, int] | None:
-    """The base snapshot for `target_day`'s growth rate: prefers the day
-    closest to `GROWTH_LOOKBACK_DAYS` back within
-    `+-GROWTH_BASE_WINDOW_DAYS`, ties broken toward the older
-    (larger-gap) day. `None` if no day in the window has data."""
-    window = range(
-        GROWTH_LOOKBACK_DAYS - GROWTH_BASE_WINDOW_DAYS,
-        GROWTH_LOOKBACK_DAYS + GROWTH_BASE_WINDOW_DAYS + 1,
-    )
-    candidate_offsets = [
-        offset for offset in window if (target_day - timedelta(days=offset)) in dates_to_values
-    ]
-    if not candidate_offsets:
-        return None
-
-    best_offset = min(
-        candidate_offsets, key=lambda offset: (abs(offset - GROWTH_LOOKBACK_DAYS), -offset)
-    )
-    best_day = target_day - timedelta(days=best_offset)
-    return dates_to_values[best_day], best_offset
 
 
 def _replay_metrics(series: _MetricSeries) -> dict[date, dict[str, ArtistDayResult]]:
@@ -194,7 +198,7 @@ def _replay_metrics(series: _MetricSeries) -> dict[date, dict[str, ArtistDayResu
             for signal_key, dates_to_values in metrics.items():
                 if as_of not in dates_to_values:
                     break
-                base = _pick_base_snapshot(dates_to_values, as_of)
+                base = pick_base_snapshot(dates_to_values, as_of)
                 if base is None:
                     break
                 base_value, gap_days = base

@@ -193,6 +193,27 @@ SCOUT_DISCOVERY_PRICE_CENTS (C12) -- both conditions, so buying a merely
 dipped blue-chip does not count as scouting an unknown. Lower either
 threshold to make the "still small" bar stricter."""
 
+# --- Oracle-manipulation review (Phase 3) --------------------------------
+
+RATIO_DIVERGENCE_MAD_THRESHOLD = 3.0
+"""How many robust MADs a growth-signal divergence must clear to flag an
+artist for review. Applied to `playcount_growth - listeners_growth`
+(unclamped, unlike the score's own Z_CLAMP'd z-scores): bot scrobbles
+inflate playcount while barely moving unique listeners, so a big positive
+divergence is the signature of exactly that attack. Lower = catches
+subtler manipulation at the cost of more false positives sitting in the
+review queue; higher = only extreme divergence gets flagged."""
+
+PERCENTILE_MOVE_THRESHOLD = 0.99
+"""Cross-sectional percentile of same-day |index_score delta| beyond
+which an artist is flagged for review, alongside the ratio-divergence
+check. Lower = more borderline movers land in the queue (more reviewer
+load, catches subtler moves); higher = only the most extreme day-over-day
+swings get flagged. A flag of either kind holds the artist's score at its
+previous value until a human clears it (see jobs/recompute.py) --
+fail-safe, since a false positive costs one day of staleness and a true
+positive costs the attacker their whole thesis."""
+
 # --- Auth (Phase 4; lives here per rule 4) --------------------------------
 
 SESSION_TTL_DAYS = 90

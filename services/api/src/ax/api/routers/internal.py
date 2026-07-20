@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ax.api.deps import MetricProviderDep, require_job_token
 from ax.db.session import get_db
+from ax.jobs.recompute import run_recompute
 from ax.jobs.snapshot import run_snapshot
 
 router = APIRouter(
@@ -58,4 +59,23 @@ def snapshot(
             detail=result.summary(),
         )
 
+    return result.summary()
+
+
+@router.post("/recompute", status_code=status.HTTP_200_OK)
+def recompute(
+    session: DbDep,
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    """Recompute the index, apply the oracle-manipulation quarantine
+    checks, list newly-eligible artists, and run the nightly reversion.
+
+    Meant to run immediately after `/snapshot` in the same nightly
+    Action, against the date that step just wrote. `as_of` is the same
+    backfill/re-run override `/snapshot` takes; `now` (the glide/listing
+    clock) is always the real current time -- unlike `as_of_date`, there
+    is no legitimate reason to backdate it.
+    """
+    as_of_date = as_of or datetime.now(UTC).date()
+    result = run_recompute(session, as_of_date, now=datetime.now(UTC))
     return result.summary()

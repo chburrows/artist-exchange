@@ -22,9 +22,8 @@ import random
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from ax.core.amm import buy_quote, plan_reversion, sell_quote, spot_price_uc
+from ax.core.amm import buy_quote, listing_slope_uc, plan_reversion, sell_quote, spot_price_uc
 from ax.core.config import (
-    AMM_DEPTH_SHARES,
     FAIR_VALUE_BASE_CENTS,
     MAX_TRADE_SHARES,
     REVERSION_GLIDE_HOURS,
@@ -39,7 +38,7 @@ FAIR_VALUE_CEIL_CENTS = 5_000
 STARTING_CASH_CENTS = 1_000_000  # matches STARTING_BALANCE_CENTS
 
 # The platform-wide AMM slope (PLAN.md): fixed across artists and time.
-SLOPE_UC = round(FAIR_VALUE_BASE_CENTS * 1_000_000 / AMM_DEPTH_SHARES)
+SLOPE_UC = listing_slope_uc()
 
 _EPOCH = datetime(2024, 1, 1, tzinfo=UTC)
 _GLIDE = timedelta(hours=REVERSION_GLIDE_HOURS)

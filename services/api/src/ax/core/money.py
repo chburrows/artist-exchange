@@ -19,6 +19,11 @@ def ceil_div(n: int, d: int) -> int:
     return -(-n // d)
 
 
+def round_div(n: int, d: int) -> int:
+    """Round-half-up integer division. Requires `d > 0`, `n >= 0`."""
+    return (n + d // 2) // d
+
+
 def cents_to_uc(cents: int) -> int:
     return cents * MICROCENTS_PER_CENT
 

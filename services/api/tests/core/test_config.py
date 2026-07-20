@@ -60,3 +60,8 @@ def test_fair_value_constants_positive() -> None:
 def test_scout_thresholds_positive() -> None:
     assert config.SCOUT_DISCOVERY_INDEX_MAX > 0
     assert config.SCOUT_DISCOVERY_PRICE_CENTS > 0
+
+
+def test_oracle_manipulation_thresholds_are_sane() -> None:
+    assert config.RATIO_DIVERGENCE_MAD_THRESHOLD > 0
+    assert 0 < config.PERCENTILE_MOVE_THRESHOLD < 1

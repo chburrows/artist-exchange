@@ -11,9 +11,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ax.core.amm import buy_quote, max_shares_within_slippage, sell_quote, spot_price_uc
-from ax.core.config import MAX_SLIPPAGE_BPS
-from ax.core.money import cents_to_uc
+from ax.core.amm import (
+    buy_quote,
+    listing_slope_uc,
+    max_shares_within_slippage,
+    sell_quote,
+    spot_price_uc,
+)
+from ax.core.config import AMM_DEPTH_SHARES, FAIR_VALUE_BASE_CENTS, MAX_SLIPPAGE_BPS
+from ax.core.money import MICROCENTS_PER_CENT, cents_to_uc
 
 from .strategies import anchor_cents, net_supply, sellable_supply, shares, slope_uc
 
@@ -144,6 +150,15 @@ def test_i13_max_shares_within_slippage_boundary(spot_uc: int, slope_uc: int) ->
     n = max_shares_within_slippage(spot_uc, slope_uc)
     assert slope_uc * n * 10_000 <= spot_uc * MAX_SLIPPAGE_BPS
     assert slope_uc * (n + 1) * 10_000 > spot_uc * MAX_SLIPPAGE_BPS
+
+
+def test_listing_slope_uc_matches_integer_round_half_up() -> None:
+    """`round_div`, not float `round()` -- CLAUDE.md rule 1. At today's
+    constants the division happens to be exact, so this pins the integer
+    result directly rather than only proving equivalence to itself."""
+    exact = FAIR_VALUE_BASE_CENTS * MICROCENTS_PER_CENT / AMM_DEPTH_SHARES
+    assert listing_slope_uc() == round(exact)
+    assert isinstance(listing_slope_uc(), int)
 
 
 def test_quotes_reject_invalid_inputs() -> None:

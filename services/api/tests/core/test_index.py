@@ -12,6 +12,7 @@ integer counts: the one that matters to the product.
 
 import math
 import statistics
+import sys
 from datetime import date, timedelta
 
 import pytest
@@ -25,6 +26,7 @@ from ax.core.config import (
     INDEX_MAX,
     INDEX_MIN,
     MIN_CROSS_SECTION_SIZE,
+    ROBUST_Z_MIN_MAD,
     SIGNAL_WEIGHTS,
 )
 from ax.core.index import (
@@ -33,6 +35,7 @@ from ax.core.index import (
     SignalInput,
     compute_index,
     fair_value_cents,
+    pick_base_snapshot,
     robust_z,
 )
 
@@ -54,6 +57,15 @@ def test_i8a_robust_z_is_bit_identical_under_dyadic_shift(
 # --- I8(b): arbitrary floats, near-identical through score/fair-value ----
 
 _small_float = st.floats(min_value=-5, max_value=5, allow_nan=False, allow_infinity=False)
+_MAX_ABS_INPUT = 5  # bound of the _small_float strategy above
+
+# I8(b)'s invariant is exact in real-number arithmetic (see I8(a) above, which
+# proves it bit-for-bit on dyadic inputs). For arbitrary floats, `v + shift`
+# loses precision when |v| << |shift|, and robust_z's `v - median` cancellation
+# recovers that error at full magnitude, then amplifies it by 1/ROBUST_Z_MIN_MAD
+# and by GROWTH_WEIGHT on the way to a score. Worst case for this strategy's
+# bounds is ~1e-8; this keeps two orders of magnitude of margin above that.
+_SCORE_TOLERANCE = 100 * sys.float_info.epsilon * _MAX_ABS_INPUT * GROWTH_WEIGHT / ROBUST_Z_MIN_MAD
 
 
 def _score_from_z(z: float) -> float:
@@ -75,7 +87,7 @@ def test_i8b_arbitrary_shift_scores_and_fair_values_nearly_identical(
     for zb, zs in zip(z_base, z_shifted, strict=True):
         score_base = _score_from_z(zb)
         score_shifted = _score_from_z(zs)
-        assert abs(score_base - score_shifted) < 1e-9
+        assert abs(score_base - score_shifted) < _SCORE_TOLERANCE
 
         fair_base = fair_value_cents(score_base)
         fair_shifted = fair_value_cents(score_shifted)
@@ -278,3 +290,43 @@ def test_archetype_tiny_produces_sane_score_and_fair_value(
     result = final_results["tiny"]
     assert INDEX_MIN <= result.index_score <= INDEX_MAX
     assert result.fair_value_cents >= 1
+
+
+# --- pick_base_snapshot (C6): shared by ax backtest and jobs/recompute --
+
+
+def test_pick_base_snapshot_prefers_exactly_seven_days_back() -> None:
+    target = date(2026, 1, 15)
+    dates_to_values = {
+        target - timedelta(days=5): 100,
+        target - timedelta(days=7): 200,
+        target - timedelta(days=9): 300,
+    }
+    assert pick_base_snapshot(dates_to_values, target) == (200, 7)
+
+
+def test_pick_base_snapshot_falls_back_within_the_window() -> None:
+    target = date(2026, 1, 15)
+    dates_to_values = {target - timedelta(days=9): 300}
+    assert pick_base_snapshot(dates_to_values, target) == (300, 9)
+
+
+def test_pick_base_snapshot_breaks_ties_toward_the_older_day() -> None:
+    target = date(2026, 1, 15)
+    # 6 and 8 days back are equidistant from the nominal 7-day target;
+    # the older (8-day) snapshot wins.
+    dates_to_values = {
+        target - timedelta(days=6): 100,
+        target - timedelta(days=8): 200,
+    }
+    assert pick_base_snapshot(dates_to_values, target) == (200, 8)
+
+
+def test_pick_base_snapshot_returns_none_outside_the_window() -> None:
+    target = date(2026, 1, 15)
+    dates_to_values = {target - timedelta(days=1): 100, target - timedelta(days=20): 200}
+    assert pick_base_snapshot(dates_to_values, target) is None
+
+
+def test_pick_base_snapshot_returns_none_for_no_history() -> None:
+    assert pick_base_snapshot({}, date(2026, 1, 15)) is None

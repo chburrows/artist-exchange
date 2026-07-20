@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: POST /internal/jobs/snapshot
+        id: snapshot
         env:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           INTERNAL_JOB_TOKEN: ${{ secrets.INTERNAL_JOB_TOKEN }}
@@ -59,6 +60,50 @@ jobs:
                     "${url}" | tee response.json; then
               echo
               echo "Snapshot succeeded on attempt ${attempt}."
+              # Recompute reads exactly the date snapshot just wrote,
+              # taken from the response rather than re-resolved
+              # independently — two calls each defaulting to "today UTC"
+              # could disagree if the run straddled a midnight boundary.
+              jq -r '"as_of_date=" + .as_of_date' response.json >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Attempt ${attempt} failed."
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+
+          echo "All 3 attempts failed."
+          exit 1
+
+      - name: POST /internal/jobs/recompute
+        id: recompute
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          INTERNAL_JOB_TOKEN: ${{ secrets.INTERNAL_JOB_TOKEN }}
+          AS_OF: ${{ steps.snapshot.outputs.as_of_date }}
+        run: |
+          set -euo pipefail
+
+          url="${API_BASE_URL%/}/internal/jobs/recompute?as_of=${AS_OF}"
+
+          # Same retry/backoff shape as the snapshot step above. Re-running
+          # is safe: index_snapshots upserts on (artist_id, as_of_date),
+          # listing/reversion no-op on a same-day retry (see
+          # jobs/recompute.py), and a duplicate ratio-divergence/
+          # percentile-move flag for the same day is impossible for the
+          # same reason.
+          for attempt in 1 2 3; do
+            echo "Attempt ${attempt}: POST ${url}"
+
+            if curl --fail-with-body --silent --show-error \
+                    --max-time 600 \
+                    --request POST \
+                    --header "Authorization: Bearer ${INTERNAL_JOB_TOKEN}" \
+                    "${url}" | tee response.json; then
+              echo
+              echo "Recompute succeeded on attempt ${attempt}."
               exit 0
             fi
 
@@ -74,7 +119,11 @@ jobs:
       - name: Report failure
         if: failure()
         run: |
-          echo "::error title=Nightly snapshot failed::\
-          Snapshots did not run. Last.fm has no history API, so this day \
-          cannot be backfilled from upstream — re-run this workflow via \
-          workflow_dispatch as soon as possible. Re-runs are safe."
+          echo "::error title=Nightly snapshot/recompute failed::\
+          The nightly pipeline did not complete. If the snapshot step \
+          failed: Last.fm has no history API, so this day cannot be \
+          backfilled from upstream. If recompute failed after a \
+          successful snapshot: the raw metrics are safely stored, only \
+          index_snapshots/price_history for this date are stale. Either \
+          way, re-run this workflow via workflow_dispatch as soon as \
+          possible — re-runs are safe."
