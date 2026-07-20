@@ -259,9 +259,7 @@ def test_idempotent_replay_finds_its_own_fee_row_not_a_later_trades(
     # (under the shared-savepoint test session) `created_at` with the
     # first trade, so its FEE row would collide with the first trade's
     # under the old `(artist_id, created_at) ==` lookup.
-    second = client.post(
-        "/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 9}
-    )
+    second = client.post("/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 9})
     assert second.status_code == 201
     assert first.json()["fee_cents"] != second.json()["fee_cents"]
 
