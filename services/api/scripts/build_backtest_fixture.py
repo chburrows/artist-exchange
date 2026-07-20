@@ -32,7 +32,7 @@ growth+level score, not of either term alone, so with too few artists a
 single noisy draw can visibly shift the population median away from 50
 even though every individual term is separately well-centered. A larger
 "normal" majority damps that sampling noise down to the +-1 the product
-actually expects (see PHASE2.md's as-built notes).
+actually expects (see PLAN.md's Phase 2 "As built" notes).
 
 Usage:
     uv run python services/api/scripts/build_backtest_fixture.py

@@ -1,10 +1,10 @@
 """I2-I5, I7, I13: the AMM's closed-form quotes.
 
-PHASE2.md notes the closed forms were checked algebraically before
-implementation, so several tests here recompute the same closed form
-independently (as `_closed_form_cost_uc` / `_closed_form_proceeds_uc`) to
-catch an implementation slip -- e.g. `n*(n+1)//2` where the formula
-needs `n*(n-1)//2` -- rather than re-proving the algebra.
+The closed forms were checked algebraically before implementation, so
+several tests here recompute the same closed form independently (as
+`_closed_form_cost_uc` / `_closed_form_proceeds_uc`) to catch an
+implementation slip -- e.g. `n*(n+1)//2` where the formula needs
+`n*(n-1)//2` -- rather than re-proving the algebra.
 """
 
 import pytest

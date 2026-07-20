@@ -1,8 +1,8 @@
 """I10, I11: the reversion kernel `reversion_move_cents`.
 
-`reversion_move_cents` lives in `ax.core.amm` (PHASE2.md keeps the whole
-AMM + reversion surface in one module) but is tested on its own here,
-independent of the glide/quote machinery landed in the previous commit.
+`reversion_move_cents` lives in `ax.core.amm` (the whole AMM + reversion
+surface stays in one module) but is tested on its own here, independent
+of the glide/quote machinery landed in the previous commit.
 """
 
 from hypothesis import given

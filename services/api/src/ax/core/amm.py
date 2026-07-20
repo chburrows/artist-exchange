@@ -1,5 +1,5 @@
 """Linear bonding-curve AMM with a mutable anchor, plus the nightly
-reversion kernel and its continuous glide (PHASE2.md).
+reversion kernel and its continuous glide.
 
 Chosen over LMSR / constant-product because it has an exact closed form
 in integer arithmetic (no float in a money path), a trivial inverse

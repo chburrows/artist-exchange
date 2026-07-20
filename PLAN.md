@@ -144,7 +144,7 @@ A genuinely new `as_of_date` appears only after a UTC day with no manual run —
 
 `services/api/src/ax/core/{config,money,amm,index,ledger}.py`. No SQLAlchemy, no FastAPI, no I/O, no `datetime.now()` — time is always a parameter. Purity is enforced mechanically by `tests/test_core_purity.py`, which walks the ASTs and asserts no import outside stdlib. That test is the cheapest guard against the core rotting into DB-coupled mess.
 
-Built from an execution spec (`PHASE2.md`) written after a full pre-implementation design review, which corrected several things below that would otherwise have put a float in a money path or left an edge case unspecified. This section now shows the corrected, as-built formulas directly — treat everything below as ground truth regardless of whether `PHASE2.md` still exists in the repo.
+Built from a pre-implementation design review that corrected several things below that would otherwise have put a float in a money path or left an edge case unspecified. This section shows the corrected, as-built formulas directly.
 
 ### Index Score
 

@@ -124,8 +124,8 @@ unprofitable), but also a higher cost for genuine scouting trades.
 Raised from an initial 75 to 100 after I14's patient-harvester
 simulation (test_sim_arb.py) showed a small but real profit
 (+0.2%-0.8% over 200 days across seeds) at sigma_daily=0.5% with 75bps;
-100bps flips it negative for every seed at that volatility, per
-PHASE2.md's tuning order (fee first, then REVERSION_RATE_BPS)."""
+100bps flips it negative for every seed at that volatility. Fee was
+tuned before REVERSION_RATE_BPS, per PLAN.md's Phase 2 "As built" notes."""
 
 MAX_SLIPPAGE_BPS = 300
 """Maximum allowed spot-price move (in bps of the pre-trade spot) for a
