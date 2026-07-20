@@ -49,6 +49,13 @@ cross-sectional computation would serialize trades against this job for
 no reason. `POST /trades` locks its own artist row first, so the two
 writers always contend on the same single row-level lock, never a
 larger set -- no additional lock-ordering rule is needed between them.
+
+Locking late only bounds when a given artist's lock is *acquired*, not
+how long it's *held* -- a `FOR UPDATE` lock lives until the transaction
+commits, so a single commit at the end of the whole per-artist loop
+would still leave every artist processed so far locked simultaneously,
+defeating the point. `run_recompute` therefore commits once per artist
+(see its own docstring) instead.
 """
 
 import logging
@@ -539,11 +546,15 @@ def run_recompute(session: Session, as_of_date: date, *, now: datetime) -> Recom
     the job stays deterministic and testable; the production endpoint
     passes `datetime.now(UTC)` and its own `.date()`.
 
-    Commits once, at the end: unlike the snapshot job's 200 independent
-    network calls, this is one in-memory cross-section computation
-    followed by one batch of writes, so a partial failure should roll
-    back the whole day's cross-section rather than leave half of it
-    published.
+    Commits once per artist, not once for the whole cross-section: each
+    artist's write is already idempotent on its own (CLAUDE.md rule 7,
+    keyed on `(artist_id, as_of_date)`), so a crash partway through simply
+    leaves the remaining artists unprocessed for today -- the next retry
+    picks them up via `_already_published_today` / the `listed_at is None`
+    branch, exactly as it would for a from-scratch run. Committing per
+    artist also releases that artist's `FOR UPDATE` lock (taken inside
+    `_apply_market_state`) immediately rather than holding it, and every
+    earlier artist's, until the entire ~200-artist loop finishes.
     """
     result = RecomputeResult(as_of_date=as_of_date)
 
@@ -616,6 +627,7 @@ def run_recompute(session: Session, as_of_date: date, *, now: datetime) -> Recom
             # data flagged as suspect (fail-safe, matching the existing
             # "no base snapshot -> warming_up" rule).
             result.skipped_first_day_flagged.append(artist.slug)
+            session.commit()
             continue
 
         if quarantined:
@@ -664,6 +676,6 @@ def run_recompute(session: Session, as_of_date: date, *, now: datetime) -> Recom
             net_supplies,
             result,
         )
+        session.commit()
 
-    session.commit()
     return result

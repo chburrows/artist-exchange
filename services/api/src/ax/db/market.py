@@ -14,6 +14,17 @@ from ax.core.money import cents_to_uc, uc_to_cents_nearest
 from ax.db.models import Artist, IndexSnapshot, PositionCache, PriceHistory, Transaction
 
 
+def is_tradable(artist: Artist) -> bool:
+    """The one predicate for "has this artist been listed and not since
+    delisted" -- shared so `api/routers/artists.py` and
+    `api/routers/trades.py` can't silently drift on what the underlying
+    condition even is, even though each maps a failing check to its own
+    HTTP status (a public GET treats it as absent; a trade attempt treats
+    it as a conflict) -- that difference is deliberate per-endpoint
+    semantics, not duplicated business logic."""
+    return artist.listed_at is not None and artist.delisted_at is None
+
+
 def latest_price_history_rows(session: Session, artist_ids: list[int]) -> dict[int, PriceHistory]:
     """Each artist's most recent `price_history` row. Its `net_supply` is
     the authoritative current supply for any *already-listed* artist:

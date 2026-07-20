@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ax.api.deps import DbDep
-from ax.db.market import latest_index_snapshots, latest_price_history_rows, spot_cents
+from ax.db.market import is_tradable, latest_index_snapshots, latest_price_history_rows, spot_cents
 from ax.db.models import TIER_BLUE_CHIP, TIER_GROWTH, Artist, IndexSnapshot, PriceHistory
 
 router = APIRouter(prefix="/artists", tags=["artists"])
@@ -101,7 +101,7 @@ def list_artists(
 
 def _get_listed_artist(db: Session, slug: str) -> Artist:
     artist = db.scalars(select(Artist).where(Artist.slug == slug)).one_or_none()
-    if artist is None or artist.listed_at is None or artist.delisted_at is not None:
+    if artist is None or not is_tradable(artist):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="artist not found")
     return artist
 

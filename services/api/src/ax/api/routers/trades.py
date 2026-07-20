@@ -49,6 +49,7 @@ from ax.db.ledger import get_position, lock_balance_cache, write_entries, write_
 from ax.db.market import (
     distinct_artist_ids_with_positions,
     effective_anchor_uc_now,
+    is_tradable,
     latest_price_history_rows,
     spot_cents,
 )
@@ -100,7 +101,7 @@ def _find_tradable_artist(db: Session, slug: str, *, lock: bool = False) -> Arti
     artist = db.scalars(stmt).one_or_none()
     if artist is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="artist not found")
-    if artist.listed_at is None or artist.delisted_at is not None:
+    if not is_tradable(artist):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="artist is not currently tradable"
         )
@@ -205,19 +206,32 @@ def quote_trade(body: TradeRequest, db: DbDep, user: CurrentUserDep) -> QuoteRes
 
 def _replay_response(db: Session, primary: TransactionModel, user_id: int) -> TradeResponse:
     """Reconstructs the response for an idempotent retry. Finding the
-    paired FEE row by matching `created_at` exactly -- not a heuristic:
-    both rows are written in the same DB transaction and `created_at`'s
-    `now()` default is *transaction-start* time (CLAUDE.md rule 9), so
-    two rows from one trade share the identical value, and two different
-    trades (different transactions) practically never do."""
-    fee_row = db.scalars(
-        select(TransactionModel).where(
-            TransactionModel.user_id == user_id,
-            TransactionModel.artist_id == primary.artist_id,
-            TransactionModel.kind == "FEE",
-            TransactionModel.created_at == primary.created_at,
-        )
-    ).one()
+    paired FEE row by `created_at` equality doesn't work: both rows are
+    written in the same DB transaction and `created_at`'s `now()` default
+    is *transaction-start* time (CLAUDE.md rule 9), so two *different*
+    trades sharing one DB transaction (the test suite's shared-savepoint
+    session does this on every test) share that same value too, and a
+    `created_at ==` match can hit more than one FEE row.
+
+    Instead: every trade this user makes is fully serialized by the fixed
+    `balance_cache`-first lock order (two of this user's trades can never
+    execute concurrently), so this user's own `transactions.id` values are
+    strictly increasing in real execution order with no interleaving from
+    anyone else's rows. `write_entries` always writes a trade's FEE row
+    immediately after its BUY/SELL leg in the same flush, so the very next
+    row by `id` for this user is always its pair -- the same "next row is
+    the pair" rule `jobs/reconcile.py._true_positions` uses, expressed as
+    a single indexed lookup instead of an in-memory walk."""
+    next_row = db.scalars(
+        select(TransactionModel)
+        .where(TransactionModel.user_id == user_id, TransactionModel.id > primary.id)
+        .order_by(TransactionModel.id)
+        .limit(1)
+    ).one_or_none()
+    fee_cents = 0
+    if next_row is not None and next_row.kind == "FEE" and next_row.artist_id == primary.artist_id:
+        fee_cents = -next_row.cash_delta_cents
+
     balance = db.get(BalanceCache, user_id)
     position = db.get(PositionCache, (user_id, primary.artist_id))
     return TradeResponse(
@@ -225,7 +239,7 @@ def _replay_response(db: Session, primary: TransactionModel, user_id: int) -> Tr
         side=TradeSide.buy if primary.kind == "BUY" else TradeSide.sell,
         shares=abs(primary.share_delta),
         exec_price_cents=primary.exec_price_cents or 0,
-        fee_cents=-fee_row.cash_delta_cents,
+        fee_cents=fee_cents,
         cash_cents=balance.cash_cents if balance is not None else 0,
         position_shares=position.shares if position is not None else 0,
         idempotent_replay=True,
@@ -247,6 +261,21 @@ def execute_trade(body: TradeRequest, db: DbDep, user: CurrentUserDep) -> TradeR
             return _replay_response(db, existing, user.id)
 
     now = datetime.now(UTC)
+
+    # Computed before any locks are taken. Best-effort and unlocked by
+    # design (see module docstring) -- it only feeds the soft
+    # MAX_ARTIST_EXPOSURE_BPS guardrail, never the overdraft check, so
+    # there's no correctness reason to pay its ~4 extra queries while
+    # holding the balance_cache/artist locks below instead of before them.
+    # An unresolved slug here just means an empty "other positions" set;
+    # the real 404/409 for a bad slug still comes from the locked lookup.
+    other_value = 0
+    if body.side is TradeSide.buy:
+        exposure_artist_id = db.scalars(
+            select(Artist.id).where(Artist.slug == body.artist_slug)
+        ).one_or_none()
+        if exposure_artist_id is not None:
+            other_value = _other_positions_value_cents(db, user.id, exposure_artist_id, now)
 
     # Fixed lock order -- see module docstring.
     balance = lock_balance_cache(db, user.id)
@@ -282,7 +311,6 @@ def execute_trade(body: TradeRequest, db: DbDep, user: CurrentUserDep) -> TradeR
 
         new_shares = position.shares + buy_q.shares
         position_value_after = new_shares * buy_q.exec_price_cents
-        other_value = _other_positions_value_cents(db, user.id, artist.id, now)
         equity_after = max(
             0, balance.cash_cents - buy_q.total_cents + position_value_after + other_value
         )

@@ -232,6 +232,48 @@ def test_idempotency_key_prevents_double_charge(
     assert first.json()["cash_cents"] == second.json()["cash_cents"]
 
 
+def test_idempotent_replay_finds_its_own_fee_row_not_a_later_trades(
+    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+) -> None:
+    """Regression test: `_replay_response` used to pair a trade with its
+    FEE row by matching `(artist_id, created_at)` exactly. The shared
+    per-test savepoint session (module docstring) means every trade in
+    this test shares one DB transaction and therefore one
+    `now()`-at-transaction-start value (CLAUDE.md rule 9) -- so a second
+    trade on the *same* artist shares both `artist_id` and `created_at`
+    with the first, which used to make the old lookup match two FEE rows
+    and raise `MultipleResultsFound` on replay instead of returning the
+    first trade's own fee."""
+    _signup(client, "multi-trader")
+    artist = make_artist("Repeatedly Traded")
+    list_artist(artist, fair_value_cents=1_000)
+    key = str(uuid4())
+
+    first = client.post(
+        "/trades",
+        json={"artist_slug": artist.slug, "side": "buy", "shares": 4, "idempotency_key": key},
+    )
+    assert first.status_code == 201
+
+    # A second trade on the *same* artist -- shares both `artist_id` and
+    # (under the shared-savepoint test session) `created_at` with the
+    # first trade, so its FEE row would collide with the first trade's
+    # under the old `(artist_id, created_at) ==` lookup.
+    second = client.post(
+        "/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 9}
+    )
+    assert second.status_code == 201
+    assert first.json()["fee_cents"] != second.json()["fee_cents"]
+
+    replay = client.post(
+        "/trades",
+        json={"artist_slug": artist.slug, "side": "buy", "shares": 4, "idempotency_key": key},
+    )
+    assert replay.status_code == 201
+    assert replay.json()["idempotent_replay"] is True
+    assert replay.json()["fee_cents"] == first.json()["fee_cents"]
+
+
 def test_idempotency_key_is_scoped_to_the_original_user(
     client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
 ) -> None:

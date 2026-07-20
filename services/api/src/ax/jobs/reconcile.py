@@ -17,10 +17,14 @@ aggregates -- so `v_positions` only covers `shares`. Full position
 truth means replaying every BUY/SELL through the same pure,
 invariant-tested `ax.core.ledger.apply_buy`/`apply_sell` the trade route
 itself uses, in `(created_at, id)` order. The BUY/SELL row and its
-paired FEE row are matched by `created_at`, for the same reason
-`api/routers/trades.py._replay_response` does: both are written in the
-same DB transaction, so they share the exact `now()`-at-transaction-start
-value (CLAUDE.md rule 9).
+paired FEE row are matched by adjacency (the next row in that order),
+not by `created_at` equality: both rows of one trade are written in the
+same DB transaction and so share the exact `now()`-at-transaction-start
+value (CLAUDE.md rule 9), but so can two *different* trades that happen
+to share a transaction -- a `created_at ==` join would silently
+mismatch a BUY with an unrelated trade's FEE row in that case.
+`api/routers/trades.py._replay_response` uses the same adjacency rule,
+scoped to one user's serialized `id` order instead of an in-memory walk.
 
 **No artist-row or position-row locking during the read/replay.** A
 concurrent trade could, in principle, commit between this job's read of
@@ -32,6 +36,13 @@ category of accepted risk as `jobs/recompute.py`'s net_supply staleness
 note. Locking every user's entire trading history against every
 concurrent trade to close this would serialize the whole platform behind
 a nightly job for a window that heals itself within a day.
+
+**Commits once per user, not once for the whole run.** `lock_balance_cache`
+takes a real `SELECT ... FOR UPDATE` on that user's row; a single commit
+at the end of the run would hold every user's lock simultaneously for the
+entire job, serializing `POST /trades` for any already-visited user
+behind the full run instead of behind just that user's own (already
+bounded, self-correcting) check.
 """
 
 import logging
@@ -159,7 +170,13 @@ def _positions_differ(cached: PositionCache, true_state: PositionState) -> bool:
 def run_reconcile(session: Session, *, now: datetime) -> ReconcileResult:
     result = ReconcileResult()
 
-    for user_id in session.scalars(select(User.id)):
+    # Materialized up front, not iterated as a live cursor: the loop body
+    # commits per user (see module docstring), and committing mid-iteration
+    # over an open server-side result set is not something the driver
+    # supports.
+    user_ids = list(session.scalars(select(User.id)))
+
+    for user_id in user_ids:
         result.users_checked += 1
 
         true_balance = _true_balance_cents(session, user_id)
@@ -214,5 +231,9 @@ def run_reconcile(session: Session, *, now: datetime) -> ReconcileResult:
             )
             write_position(session, user_id, artist_id, true_state)
 
-    session.commit()
+        # Per user, not once at the end -- see module docstring. Releases
+        # this user's balance_cache FOR UPDATE lock immediately instead of
+        # holding it (and every earlier user's) until the whole run commits.
+        session.commit()
+
     return result

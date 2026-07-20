@@ -18,6 +18,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # `users.email` must be unique for the same reason `username` already
+    # is: `consume_magic_link` (api/routers/auth.py) treats an
+    # `IntegrityError` on `user.email = link.email` as its signal that a
+    # concurrent request already attached this exact address to another
+    # account -- a signal only a real unique constraint can ever raise.
+    # `email` stays nullable (an unattached account has none); Postgres
+    # unique constraints permit any number of NULLs, only non-NULL
+    # duplicates are rejected.
+    op.create_unique_constraint(op.f("uq_users_email"), "users", ["email"])
+
     # `magic_links.user_id` -- a deliberate deviation from PLAN.md's
     # literal schema, same category of deviation as price_history's
     # surrogate key. See the docstring on `ax.db.models.MagicLink` for
@@ -76,3 +86,5 @@ def downgrade() -> None:
     op.drop_constraint(op.f("fk_magic_links_user_id_users"), "magic_links", type_="foreignkey")
     op.drop_index(op.f("ix_magic_links_user_id"), table_name="magic_links")
     op.drop_column("magic_links", "user_id")
+
+    op.drop_constraint(op.f("uq_users_email"), "users", type_="unique")

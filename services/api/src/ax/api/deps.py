@@ -3,8 +3,10 @@
 import secrets
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Annotated
 
+import httpx
 from fastapi import Cookie, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
@@ -55,22 +57,37 @@ def get_metric_provider(settings: SettingsDep) -> Iterator[MetricProvider]:
 MetricProviderDep = Annotated[MetricProvider, Depends(get_metric_provider)]
 
 
+@lru_cache(maxsize=1)
+def _shared_resend_http_client() -> httpx.Client:
+    """One pooled, keep-alive connection to Resend for the life of the
+    process, instead of a fresh TCP+TLS handshake on every request that
+    sends a magic link -- `ResendEmailProvider` accepts an injected
+    client for exactly this reuse."""
+    return httpx.Client(timeout=10.0)
+
+
 def get_email_provider(settings: SettingsDep) -> Iterator[EmailProvider]:
     """The channel magic links go out on. A dependency for the same
     reason `get_metric_provider` is: auth routes' tests substitute a fake
-    and exercise signup/attach/recovery without a real network call."""
+    and exercise signup/attach/recovery without a real network call.
+
+    Unlike `get_metric_provider`, this does not close its client on
+    teardown: the client is the process-lifetime singleton above, shared
+    across every request, not owned by this one provider instance --
+    closing it here would break every subsequent request."""
     try:
-        provider = ResendEmailProvider(settings.resend_api_key, settings.email_from_address)
+        provider = ResendEmailProvider(
+            settings.resend_api_key,
+            settings.email_from_address,
+            client=_shared_resend_http_client(),
+        )
     except EmailAuthError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
 
-    try:
-        yield provider
-    finally:
-        provider.close()
+    yield provider
 
 
 EmailProviderDep = Annotated[EmailProvider, Depends(get_email_provider)]

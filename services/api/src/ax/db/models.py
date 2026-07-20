@@ -53,7 +53,7 @@ class User(Base):
     # by the column type rather than by remembering to .lower() at every
     # call site.
     username: Mapped[str] = mapped_column(CITEXT, unique=True)
-    email: Mapped[str | None] = mapped_column(CITEXT, nullable=True)
+    email: Mapped[str | None] = mapped_column(CITEXT, unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 

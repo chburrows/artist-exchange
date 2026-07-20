@@ -26,7 +26,7 @@ API one).
 import logging
 import secrets
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Cookie, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -87,25 +87,42 @@ class ConsumeResponse(BaseModel):
     user: UserOut
 
 
+class _CookieAttrs(NamedTuple):
+    secure: bool
+    samesite: Literal["none", "lax"]
+
+
+def _cookie_attrs(settings: Settings) -> _CookieAttrs:
+    """Shared by `_set_session_cookie` and `logout`: a browser only clears
+    a cookie via `Set-Cookie` if the clearing response's `Secure`/
+    `SameSite`/`Path` match the original exactly, so these can't be two
+    independent copies that might drift.
+
+    The web app is always cross-origin from the API (static export on a
+    different host, per CLAUDE.md), so a cross-site cookie needs
+    `SameSite=None` -- which browsers only honor alongside `Secure`,
+    hence the pairing with `is_production` rather than a fixed value.
+    Local/test runs over plain HTTP, where `Secure` cookies wouldn't be
+    sent at all, fall back to `Lax` (same-site is realistic there:
+    localhost talking to localhost)."""
+    return _CookieAttrs(
+        secure=settings.is_production,
+        samesite="none" if settings.is_production else "lax",
+    )
+
+
 def _set_session_cookie(
     response: Response, settings: Settings, raw_token: str, now: datetime
 ) -> None:
     expires_at = session_expiry(now)
+    attrs = _cookie_attrs(settings)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=raw_token,
         max_age=int((expires_at - now).total_seconds()),
         httponly=True,
-        secure=settings.is_production,
-        # The web app is always cross-origin from the API (static export
-        # on a different host, per CLAUDE.md), so a cross-site cookie
-        # needs SameSite=None -- which browsers only honor alongside
-        # Secure, hence the pairing with `is_production` above rather
-        # than a fixed value. Local/test runs over plain HTTP, where
-        # Secure cookies wouldn't be sent at all, so they fall back to
-        # Lax (same-site is realistic there: localhost talking to
-        # localhost).
-        samesite="none" if settings.is_production else "lax",
+        secure=attrs.secure,
+        samesite=attrs.samesite,
         path="/",
     )
 
@@ -178,11 +195,12 @@ def logout(
             row.revoked_at = datetime.now(UTC)
             db.commit()
 
+    attrs = _cookie_attrs(settings)
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
         path="/",
-        secure=settings.is_production,
-        samesite="none" if settings.is_production else "lax",
+        secure=attrs.secure,
+        samesite=attrs.samesite,
     )
 
 
