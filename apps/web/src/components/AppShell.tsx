@@ -37,23 +37,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
         </Link>
 
-        {signedIn && (
-          <nav className="hidden items-center gap-1 rounded-xl border border-border bg-card p-1 md:flex">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "rounded-lg px-3.5 py-2 text-sm font-bold text-muted-foreground transition-colors",
-                  isActive(item.href) && "bg-primary text-primary-foreground",
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        )}
-
         <div className="flex items-center gap-2">
           {signedIn && portfolio.data && (
             <Link
@@ -75,9 +58,44 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className={cn("mx-auto max-w-5xl px-4 pt-6 sm:px-6", signedIn ? "pb-24 md:pb-10" : "pb-10")}>
-        {children}
-      </main>
+      <div className="mx-auto flex max-w-6xl items-start">
+        {signedIn && (
+          <aside className="sticky top-16 hidden w-20 shrink-0 flex-col items-center gap-6 self-start py-8 md:flex">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex flex-col items-center gap-1.5"
+              >
+                <span
+                  className={cn(
+                    "h-6 w-6 rounded-md border border-border bg-secondary",
+                    isActive(item.href) && "border-transparent bg-primary",
+                  )}
+                  aria-hidden
+                />
+                <span
+                  className={cn(
+                    "text-[11px] font-bold text-muted-foreground",
+                    isActive(item.href) && "text-primary",
+                  )}
+                >
+                  {item.label}
+                </span>
+              </Link>
+            ))}
+          </aside>
+        )}
+
+        <main
+          className={cn(
+            "min-w-0 max-w-5xl flex-1 px-4 pt-6 sm:px-6",
+            signedIn ? "pb-24 md:pb-10" : "pb-10",
+          )}
+        >
+          {children}
+        </main>
+      </div>
 
       {signedIn && (
         <nav className="fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-border bg-background py-2 md:hidden">

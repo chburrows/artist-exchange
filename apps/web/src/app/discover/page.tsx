@@ -1,19 +1,33 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { ArtistAvatar } from "@/components/ArtistAvatar";
 import { ArtistCard } from "@/components/ArtistCard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { formatCents, formatPct } from "@/lib/format";
 import { mockDailyChangePct } from "@/lib/mock-discovery";
 import { type ArtistOut, useArtists } from "@/lib/queries";
+
+const PAGE_SIZE = 8;
 
 function withChange(artists: ArtistOut[]) {
   return artists.map((a) => ({ ...a, changePct: mockDailyChangePct(a.slug) }));
 }
 
+function updatedLabel(dataUpdatedAt: number): string {
+  if (!dataUpdatedAt) return "";
+  const minutes = Math.round((Date.now() - dataUpdatedAt) / 60_000);
+  return minutes < 1 ? "Updated just now" : `Updated ${minutes}m ago`;
+}
+
 export default function DiscoverPage() {
   const artists = useArtists();
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
 
   if (artists.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading artists…</p>;
@@ -34,6 +48,15 @@ export default function DiscoverPage() {
     .slice(0, 5);
   const blueChipRoster = [...blueChip].sort((a, b) => b.spot_price_cents - a.spot_price_cents).slice(0, 5);
   const topMover = biggestMovers[0];
+
+  const allWithChange = withChange(artists.data);
+  const term = search.trim().toLowerCase();
+  const filtered = term ? allWithChange.filter((a) => a.name.toLowerCase().includes(term)) : allWithChange;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageItems = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const isFirstPage = currentPage === 0;
+  const isLastPage = currentPage === totalPages - 1;
 
   return (
     <div className="flex flex-col gap-8 pb-6">
@@ -128,6 +151,82 @@ export default function DiscoverPage() {
               <span className="text-sm font-bold tabular-nums">{formatCents(a.spot_price_cents)}</span>
             </Link>
           ))}
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+            Browse all artists
+          </h2>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[11px] text-muted-foreground">
+              {updatedLabel(artists.dataUpdatedAt)}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => artists.refetch()}>
+              <span className={cn("inline-block", artists.isFetching && "animate-spin")}>↻</span>{" "}
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        <div className="relative mb-4">
+          <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-sm text-muted-foreground">
+            ⌕
+          </span>
+          <Input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
+            placeholder="Search by artist…"
+            className="pl-9"
+          />
+        </div>
+
+        {pageItems.length > 0 ? (
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {pageItems.map((a) => (
+              <ArtistCard
+                key={a.slug}
+                slug={a.slug}
+                name={a.name}
+                tier={a.tier as "growth" | "blue_chip"}
+                priceCents={a.spot_price_cents}
+                changePct={a.changePct}
+                size="sm"
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="py-9 text-center text-sm text-muted-foreground">
+            No artists match &quot;{search}&quot;
+          </p>
+        )}
+
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            Page {currentPage + 1} of {totalPages} · {filtered.length} artists
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isFirstPage}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              ← Prev
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isLastPage}
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            >
+              Next →
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -5,10 +5,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ArtistAvatar } from "@/components/ArtistAvatar";
 import { STARTING_BALANCE_CENTS } from "@/lib/constants";
 import { errorMessage } from "@/lib/errors";
 import { formatCents } from "@/lib/format";
-import { useSignup } from "@/lib/queries";
+import { useArtists, useSignup } from "@/lib/queries";
 
 import { SignInPanel } from "./SignInPanel";
 
@@ -22,6 +23,7 @@ export function OnboardingScreen() {
   const [username, setUsername] = useState("");
   const [signInOpen, setSignInOpen] = useState(false);
   const signup = useSignup();
+  const roster = useArtists();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +85,17 @@ export function OnboardingScreen() {
           </li>
         ))}
       </ol>
+
+      {roster.data && roster.data.length > 0 && (
+        <div className="mt-2 w-full">
+          <p className="mb-2.5 text-xs text-muted-foreground">Meet the roster</p>
+          <div className="flex justify-center gap-2.5">
+            {roster.data.slice(0, 5).map((a) => (
+              <ArtistAvatar key={a.slug} slug={a.slug} tier={a.tier as "growth" | "blue_chip"} size={44} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
