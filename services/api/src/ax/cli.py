@@ -1,24 +1,30 @@
 """`ax` — local development and operations CLI.
 
 Phase 1 shipped `seed-artists` and `snapshot`; Phase 2 added `backtest`;
-Phase 3 added `recompute`; Phase 4 adds `reconcile`. The remaining
-commands CLAUDE.md documents (`fake-history`, `simulate-trades`, `reset`)
-arrive with the phases that give them something to do — a stub that
-prints "not implemented" is worse than an honest absence, because it
-looks like a working command in `--help`.
+Phase 3 added `recompute`; Phase 4 added `reconcile`; Phase 5 adds
+`fake-history`, `simulate-trades`, and `reset` — the dev-speed unlocks
+PLAN.md's "Local dev and faking history" section describes, needed so
+Phase 5 UI work never waits on real (weeks-long) Last.fm history. All
+three are dev-only: never point them at production (CLAUDE.md).
 """
 
 import csv
 import json
 import logging
-from datetime import UTC, date, datetime
+import math
+import random
+import subprocess
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from sqlalchemy import func, select
+from fastapi import HTTPException
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 
+from ax.api.routers.trades import TradeRequest, TradeSide, execute_trade
+from ax.core.config import STARTING_BALANCE_CENTS
 from ax.core.index import (
     ArtistDayInput,
     ArtistDayResult,
@@ -26,17 +32,23 @@ from ax.core.index import (
     compute_index,
     pick_base_snapshot,
 )
-from ax.db.models import Artist, MetricSnapshot
-from ax.db.session import session_scope
+from ax.core.ledger import grant_entries
+from ax.db.ledger import lock_balance_cache, write_entries
+from ax.db.models import TIER_BLUE_CHIP, TIER_GROWTH, Artist, MetricSnapshot, User
+from ax.db.session import get_engine, session_scope
 from ax.jobs.recompute import run_recompute
 from ax.jobs.reconcile import run_reconcile
-from ax.jobs.snapshot import run_snapshot
+from ax.jobs.snapshot import active_artists, run_snapshot
 from ax.logging_config import configure_third_party_logging
+from ax.providers.lastfm import METRIC_LISTENERS, METRIC_PLAYCOUNT
+from ax.providers.lastfm import SOURCE as LASTFM_SOURCE
 from ax.providers.lastfm import LastfmProvider
 from ax.settings import get_settings
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
+# services/api/src/ax/cli.py -> services/api/src/ax -> ... -> repo root.
+REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_SEED_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "artists_seed.json"
 DEFAULT_BACKTEST_CSV = (
     Path(__file__).resolve().parent.parent.parent
@@ -71,6 +83,14 @@ def seed_artists(
     touched — re-seeding must not reset a live market or relist a
     delisted artist.
     """
+    total = _seed_artists(path)
+    typer.echo(f"Seeded artists from {path.name}; {total} total in universe.")
+
+
+def _seed_artists(path: Path) -> int:
+    """Shared by the `seed-artists` command and `reset` (CLAUDE.md rule:
+    `core/` stays pure, but this module-level split just avoids `reset`
+    having to shell out to itself for a step it can call directly)."""
     records: list[dict[str, Any]] = json.loads(path.read_text())
 
     with session_scope() as session:
@@ -95,7 +115,7 @@ def seed_artists(
 
         total = session.scalar(select(func.count()).select_from(Artist))
 
-    typer.echo(f"Seeded {len(records)} artists from {path.name}; {total} total in universe.")
+    return total or 0
 
 
 @app.command("snapshot")
@@ -180,6 +200,221 @@ def reconcile() -> None:
         result = run_reconcile(session, now=datetime.now(UTC))
 
     typer.echo(json.dumps(result.summary(), indent=2))
+
+
+# --- Fake history + simulated trading (Phase 5 dev-speed unlocks) --------
+#
+# PLAN.md: "generate synthetic metric_snapshots via a GBM walk on
+# listeners with a monotonic playcount derived from it, so the fake data
+# carries the same pathology as the real data" -- the whole point is that
+# `fake-history` must feed the *real* `compute_index`/`run_recompute`
+# pipeline, never a shortcut that writes `index_snapshots` directly.
+
+_BLUE_CHIP_LISTENERS_RANGE = (20_000.0, 200_000.0)
+_GROWTH_LISTENERS_RANGE = (300.0, 3_000.0)
+# Daily drift/vol tuned only to "looks like a plausible artist trajectory
+# over 120 days," not calibrated against real Last.fm data the way
+# core/config.py's economics constants are -- this is fake data by
+# definition, so it lives here, not in core/config.py.
+_BLUE_CHIP_DRIFT_VOL = (0.0008, 0.012)
+_GROWTH_DRIFT_VOL = (0.006, 0.05)
+
+
+def _fake_history(days: int, seed: int) -> None:
+    with session_scope() as session:
+        artists = active_artists(session)
+        if not artists:
+            typer.echo("No artists in the universe -- run `ax seed-artists` first.")
+            raise typer.Exit(code=1)
+
+        # One RNG per artist, seeded from (global seed, slug) so a series
+        # is deterministic and independent of the universe's iteration
+        # order -- adding or removing an unrelated artist never perturbs
+        # everyone else's walk.
+        listeners: dict[int, float] = {}
+        playcount: dict[int, float] = {}
+        rngs: dict[int, random.Random] = {}
+        for artist in artists:
+            artist_rng = random.Random(f"{seed}:{artist.slug}")
+            lo, hi = (
+                _BLUE_CHIP_LISTENERS_RANGE if artist.tier == TIER_BLUE_CHIP else _GROWTH_LISTENERS_RANGE
+            )
+            listeners[artist.id] = artist_rng.uniform(lo, hi)
+            playcount[artist.id] = listeners[artist.id] * artist_rng.uniform(8.0, 20.0)
+            rngs[artist.id] = artist_rng
+
+        today = datetime.now(UTC).date()
+        start = today - timedelta(days=days - 1)
+
+        for offset in range(days):
+            as_of_date = start + timedelta(days=offset)
+            for artist in artists:
+                artist_rng = rngs[artist.id]
+                mu, sigma = (
+                    _BLUE_CHIP_DRIFT_VOL if artist.tier == TIER_BLUE_CHIP else _GROWTH_DRIFT_VOL
+                )
+                z = artist_rng.gauss(0.0, 1.0)
+                # Last.fm listeners is itself cumulative-ish (a monthly
+                # active count that only slowly forgets), modeled here as
+                # a GBM walk -- never negative, compounding growth/decay.
+                listeners[artist.id] = max(
+                    10.0, listeners[artist.id] * math.exp((mu - 0.5 * sigma * sigma) + sigma * z)
+                )
+                # playcount is monotonic non-decreasing by construction
+                # (CLAUDE.md gotcha: real Last.fm playcount only ever goes
+                # up) -- this is the property I8 exists to test against.
+                plays_today = listeners[artist.id] * artist_rng.uniform(6.0, 14.0)
+                playcount[artist.id] += max(0.0, plays_today)
+
+                for metric_key, value in (
+                    (METRIC_LISTENERS, round(listeners[artist.id])),
+                    (METRIC_PLAYCOUNT, round(playcount[artist.id])),
+                ):
+                    stmt = insert(MetricSnapshot).values(
+                        artist_id=artist.id,
+                        as_of_date=as_of_date,
+                        source=LASTFM_SOURCE,
+                        metric_key=metric_key,
+                        value=int(value),
+                    )
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["artist_id", "as_of_date", "source", "metric_key"],
+                        set_={"value": stmt.excluded.value},
+                    )
+                    session.execute(stmt)
+            session.commit()
+
+            # A fixed hour per backfilled day, matching the real nightly
+            # cron's hour (`0 7 * * *`) -- so each day's glide window is a
+            # full REVERSION_GLIDE_HOURS and the next day's starts right
+            # where it ends, same as production.
+            recompute_now = datetime.combine(as_of_date, time(7, 0), tzinfo=UTC)
+            result = run_recompute(session, as_of_date, now=recompute_now)
+            typer.echo(
+                f"{as_of_date}: eligible={result.eligible} published={result.published} "
+                f"held={result.held} newly_listed={len(result.newly_listed)}"
+            )
+
+
+@app.command("fake-history")
+def fake_history(
+    days: Annotated[int, typer.Option(help="Number of historical days to backfill")] = 120,
+    seed: Annotated[int, typer.Option(help="Deterministic RNG seed")] = 42,
+) -> None:
+    """Backfill `days` of synthetic `metric_snapshots` (GBM walk on
+    listeners, monotonic playcount) and replay the real recompute job over
+    each historical date in order -- the same pipeline the nightly job
+    runs, so listing, EWMA carry, quarantine checks, and reversion all
+    behave exactly as they would on real data. Deterministic under
+    `--seed`. Dev-only -- never run against production (CLAUDE.md)."""
+    _fake_history(days, seed)
+
+
+def _simulate_trades(users: int, days: int, seed: int) -> None:
+    with session_scope() as session:
+        rng = random.Random(seed)
+
+        sim_users: list[User] = []
+        for i in range(users):
+            username = f"sim_{i:04d}"
+            existing = session.scalars(select(User).where(User.username == username)).one_or_none()
+            if existing is not None:
+                sim_users.append(existing)
+                continue
+            user = User(username=username)
+            session.add(user)
+            session.flush()
+            balance = lock_balance_cache(session, user.id)
+            write_entries(session, balance, user.id, grant_entries(STARTING_BALANCE_CENTS))
+            session.commit()
+            sim_users.append(user)
+
+        artist_slugs = list(
+            session.scalars(
+                select(Artist.slug).where(
+                    Artist.listed_at.is_not(None), Artist.delisted_at.is_(None)
+                )
+            )
+        )
+        if not artist_slugs:
+            typer.echo("No listed artists -- run `ax fake-history` first.")
+            raise typer.Exit(code=1)
+
+        succeeded = 0
+        rejected = 0
+        for _round in range(days):
+            for user in sim_users:
+                slug = rng.choice(artist_slugs)
+                side = TradeSide.buy if rng.random() < 0.65 else TradeSide.sell
+                shares = rng.randint(1, 15)
+                body = TradeRequest(artist_slug=slug, side=side, shares=shares)
+                try:
+                    # The real trade route function, called directly
+                    # instead of through HTTP -- same locking, validation,
+                    # ledger writes, and price_history append production
+                    # uses (PLAN.md: "through the real AMM and real ledger
+                    # path"). FastAPI's `Annotated[..., Depends(...)]`
+                    # parameter types are only resolved by the ASGI
+                    # dependency-injection layer; called as a plain
+                    # function they're irrelevant, so passing concrete
+                    # `session`/`user` objects here is safe.
+                    execute_trade(body, session, user)
+                    succeeded += 1
+                except HTTPException:
+                    # Expected: overdraft, exposure cap, slippage cap,
+                    # oversell -- a random agent is supposed to hit these
+                    # sometimes. `execute_trade` already rolled back
+                    # before raising.
+                    rejected += 1
+
+        typer.echo(f"trades: {succeeded} succeeded, {rejected} rejected by guardrails (expected)")
+
+
+@app.command("simulate-trades")
+def simulate_trades(
+    users: Annotated[int, typer.Option(help="Number of simulated users")] = 50,
+    days: Annotated[int, typer.Option(help="Number of trading rounds")] = 120,
+    seed: Annotated[int, typer.Option(help="Deterministic RNG seed")] = 42,
+) -> None:
+    """Random agents trading through the real AMM and real ledger path
+    (`api.routers.trades.execute_trade`, called directly -- no HTTP),
+    producing realistic price history and non-empty portfolios. Requires
+    listed artists -- run `ax fake-history` first. Dev-only (CLAUDE.md)."""
+    _simulate_trades(users, days, seed)
+
+
+@app.command("reset")
+def reset(
+    users: Annotated[int, typer.Option(help="Simulated users for simulate-trades")] = 50,
+    days: Annotated[int, typer.Option(help="Days for fake-history / simulate-trades rounds")] = 120,
+    seed: Annotated[int, typer.Option(help="Deterministic RNG seed")] = 42,
+    seed_path: Annotated[Path, typer.Option(help="Seed JSON to load")] = DEFAULT_SEED_PATH,
+) -> None:
+    """Drop, migrate, seed, fake-history, and simulate-trades in one
+    command -- a fully reproducible local dev DB from nothing. Refuses to
+    run with `ENVIRONMENT=production` (CLAUDE.md: fake data must never
+    reach production); there is no confirmation prompt beyond that, so
+    only ever point this at a local or disposable database."""
+    settings = get_settings()
+    if settings.is_production:
+        typer.echo("refusing to run `ax reset`: ENVIRONMENT=production", err=True)
+        raise typer.Exit(code=1)
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+    typer.echo("schema dropped and recreated")
+
+    subprocess.run(["alembic", "upgrade", "head"], cwd=REPO_ROOT, check=True)
+    typer.echo("migrations applied")
+
+    total = _seed_artists(seed_path)
+    typer.echo(f"seeded {total} artists")
+
+    _fake_history(days, seed)
+    _simulate_trades(users, days, seed)
+    typer.echo("reset complete")
 
 
 def _load_metrics_csv(path: Path) -> _MetricSeries:

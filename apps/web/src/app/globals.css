@@ -1,13 +1,89 @@
+@import "tailwindcss";
+
+/* Tailwind v4 utilities are driven by class (`.dark`), not the media
+   query, so the theme toggle in AppShell can override the OS preference
+   that the inline bootstrap script in layout.tsx applies by default. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf9f7;
+  --foreground: #17171a;
+  --card: #ffffff;
+  --card-foreground: #17171a;
+  --popover: #ffffff;
+  --popover-foreground: #17171a;
+  --primary: #5b4fe0;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f0ec;
+  --secondary-foreground: #17171a;
+  --muted: #f1f0ec;
+  --muted-foreground: #6d6d75;
+  --accent: #f1f0ec;
+  --accent-foreground: #17171a;
+  --destructive: #d8483a;
+  --destructive-foreground: #ffffff;
+  --positive: #1e9e62;
+  --positive-foreground: #ffffff;
+  --border: #e3e1db;
+  --input: #e3e1db;
+  --ring: #5b4fe0;
+  --radius: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #0d0e12;
+  --foreground: #f1f1ee;
+  --card: #171922;
+  --card-foreground: #f1f1ee;
+  --popover: #171922;
+  --popover-foreground: #f1f1ee;
+  --primary: #7c6cff;
+  --primary-foreground: #ffffff;
+  --secondary: #1f2230;
+  --secondary-foreground: #f1f1ee;
+  --muted: #1f2230;
+  --muted-foreground: #9598a6;
+  --accent: #1f2230;
+  --accent-foreground: #f1f1ee;
+  --destructive: #ff6b5c;
+  --destructive-foreground: #0d0e12;
+  --positive: #3ecf8e;
+  --positive-foreground: #0d0e12;
+  --border: #2a2d3a;
+  --input: #2a2d3a;
+  --ring: #7c6cff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-positive: var(--positive);
+  --color-positive-foreground: var(--positive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans:
+    "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 html {
@@ -22,19 +98,15 @@ body {
 
 body {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 * {
   box-sizing: border-box;
-  padding: 0;
-  margin: 0;
 }
 
 a {
@@ -42,8 +114,6 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
 }
