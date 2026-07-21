@@ -136,7 +136,7 @@ jobs:
 
       # Proves the image actually starts and serves traffic. A build that
       # succeeds but exits on boot looks green without this.
-      - name: Smoke-test the image
+      - name: Smoke-test the api image
         run: |
           set -euo pipefail
           docker run -d --name api -p 8000:8000 \
@@ -155,6 +155,35 @@ jobs:
 
           echo "Container never became healthy. Logs:"
           docker logs api
+          exit 1
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          load: true
+          tags: artist-exchange-web:ci
+          build-args: NEXT_PUBLIC_API_BASE_URL=https://ci-placeholder.invalid
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the web image
+        run: |
+          set -euo pipefail
+          docker run -d --name web -p 3000:3000 artist-exchange-web:ci
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/ > /dev/null; then
+              echo "Image serves /."
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Container never became healthy. Logs:"
+          docker logs web
           exit 1
 
   web:

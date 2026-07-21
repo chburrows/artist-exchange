@@ -55,13 +55,14 @@ uv run ax reset                       # migrate + seed + fake history + simulate
 
 ## Railway deploy
 
-As of Phase 1 only **Postgres** and **api** need to exist. The `web`
-service arrives with Phase 5.
+Three services: **Postgres**, **api**, **web**.
 
-The Docker **build context is the repo root**, not `services/api` — the uv
-workspace root (`pyproject.toml`, `uv.lock`) and `alembic.ini` live there.
-`services/api/railway.json` already encodes this, along with the release
-command and health check, so most of the setup below is just secrets.
+The Docker **build context is the repo root** for both app services, not
+`services/api` or `apps/web` — the uv workspace root (`pyproject.toml`,
+`uv.lock`, `alembic.ini`) and the pnpm workspace root (`pnpm-workspace.yaml`,
+`pnpm-lock.yaml`) both live there. `services/api/railway.json` and
+`apps/web/railway.json` already encode this, along with each service's
+release/health-check config, so most of the setup below is just secrets.
 
 ### 1. Postgres
 
@@ -93,11 +94,44 @@ right, then set these variables:
 | `INTERNAL_JOB_TOKEN` | `openssl rand -hex 32` — keep this value, GitHub needs it too |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `ENVIRONMENT` | `production` |
-| `WEB_ORIGIN` | the web URL once Phase 5 deploys; until then anything |
+| `WEB_ORIGIN` | the web service's public URL — leave a placeholder for now, come back and set it once step 3 below gives you the real one, then redeploy api |
 
-Then generate a public domain for the service and note the URL.
+Then generate a public domain for the service and note the URL — this is
+`NEXT_PUBLIC_API_BASE_URL` for step 3.
 
-### 3. Seed the production universe
+### 3. web
+
+Create a second service from the same GitHub repo. Railway reads
+`apps/web/railway.json`, which sets:
+
+- **Dockerfile**: `apps/web/Dockerfile`
+- **Health check**: `/` (the app is a static export — there is no `/health`
+  endpoint, just static files, so the health check is "does the server
+  respond at all")
+
+Set the root directory to `/` (the repo root), same reason as api, then set:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | the api service's public URL from step 2 |
+
+**This one has to be set before the first build, not after.** Next.js
+inlines every `NEXT_PUBLIC_*` variable into the static JS bundle at
+`next build` time — there is no server at runtime to read it from later,
+unlike api's env vars. Railway forwards a Dockerfile-building service's
+variables in as Docker build args automatically, and `apps/web/Dockerfile`
+declares `ARG NEXT_PUBLIC_API_BASE_URL` to receive it, so setting it as a
+normal service variable (not a special "build variable") is enough — just
+set it *before* triggering the first deploy. If you change it later, you
+must trigger a fresh build (a redeploy of the same image will keep serving
+the old baked-in value).
+
+Then generate a public domain for the service, note the URL, and go back
+to step 2 to set the api service's `WEB_ORIGIN` to it — magic-link emails
+and CORS both depend on that value being the real web URL, not the
+placeholder. Redeploy api after changing it.
+
+### 4. Seed the production universe
 
 The artist universe is a one-time load. From the Railway service shell,
 or locally with `DATABASE_URL` pointed at production:
@@ -129,6 +163,13 @@ covered by the I12 tests.
 
 ```bash
 curl -fsS "$API_BASE_URL/health"
+
+# Web is a static export -- a 200 here just proves the container is
+# serving files. Load it in a browser to confirm it can actually reach
+# the api (open the network tab; requests should hit $API_BASE_URL, not
+# localhost -- a stale build means NEXT_PUBLIC_API_BASE_URL was set after
+# the last build, see step 3 above).
+curl -fsS "$WEB_URL/" > /dev/null && echo "web is up"
 
 # Should 401 — the endpoint is public, the token is the only guard.
 curl -s -o /dev/null -w '%{http_code}\n' -X POST "$API_BASE_URL/internal/jobs/snapshot"
