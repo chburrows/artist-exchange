@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { HoldingRow } from "@/components/HoldingRow";
+import { STARTING_BALANCE_CENTS } from "@/lib/constants";
 import { formatCents, formatPct, pctChange } from "@/lib/format";
 import { mockTalentScoutScore } from "@/lib/mock-discovery";
 import { useMe, usePortfolio } from "@/lib/queries";
@@ -31,9 +32,14 @@ export default function PortfolioPage() {
   }
 
   const { cash_cents, equity_cents, positions } = portfolio.data;
-  const costBasisCents = positions.reduce((sum, p) => sum + p.avg_cost_cents * p.shares, 0);
-  const totalGainCents = positions.reduce((sum, p) => sum + p.unrealized_pnl_cents + p.realized_pnl_cents, 0);
-  const totalGainPct = costBasisCents > 0 ? pctChange(costBasisCents, costBasisCents + totalGainCents) : 0;
+  // Growth vs. the fixed starting balance, not P&L over currently-held
+  // cost basis: `avg_cost_cents` only reflects shares still held, so a
+  // partially-sold position's realized gain has no cost basis left to
+  // divide by there -- `equity_cents` already nets in every realized gain
+  // via `cash_cents`, so comparing it against the known starting balance
+  // gives the true all-time return without needing per-sale cost data.
+  const totalGainCents = equity_cents - STARTING_BALANCE_CENTS;
+  const totalGainPct = pctChange(STARTING_BALANCE_CENTS, equity_cents);
   const scoutShares = positions.reduce((sum, p) => sum + p.scout_shares, 0);
   const scout = mockTalentScoutScore(me.data.id);
 

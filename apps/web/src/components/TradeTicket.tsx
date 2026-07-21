@@ -10,11 +10,9 @@ import { type TradeSide, useExecuteTrade, useTradeQuote } from "@/lib/queries";
 
 export function TradeTicket({
   artistSlug,
-  spotPriceCents,
   userShares,
 }: {
   artistSlug: string;
-  spotPriceCents: number;
   userShares: number;
 }) {
   const [side, setSide] = useState<TradeSide>("buy");
@@ -32,7 +30,11 @@ export function TradeTicket({
   const confirmed =
     confirmedFor && confirmedFor.side === side && confirmedFor.qty === qty ? confirmedFor.message : null;
 
-  const estCents = quote.data?.total_cents ?? qty * spotPriceCents;
+  // No naive `qty * spotPrice` fallback: the AMM's real cost/proceeds
+  // include a per-share slippage term and a fee that a linear multiply
+  // can't reproduce, so a wrong-but-confident number is worse here than a
+  // loading state until the real quote lands.
+  const estCents = quote.data?.total_cents;
   const violations = quote.data?.violations ?? [];
   const sellingMoreThanHeld = side === "sell" && qty > userShares;
 
@@ -81,7 +83,9 @@ export function TradeTicket({
         </Button>
         <span className="ml-auto text-right text-sm text-muted-foreground">
           Est. {side === "buy" ? "cost" : "proceeds"}{" "}
-          <b className="font-bold text-foreground">{formatCents(estCents)}</b>
+          <b className="font-bold text-foreground">
+            {estCents !== undefined ? formatCents(estCents) : "…"}
+          </b>
         </span>
       </div>
 

@@ -100,7 +100,7 @@ function ArtistPageContent() {
 
       <div className="lg:w-80 lg:shrink-0">
         {me.data ? (
-          <TradeTicket artistSlug={a.slug} spotPriceCents={a.spot_price_cents} userShares={position?.shares ?? 0} />
+          <TradeTicket artistSlug={a.slug} userShares={position?.shares ?? 0} />
         ) : (
           <div className="rounded-2xl border border-border bg-card p-5 text-center">
             <p className="text-sm text-muted-foreground">Sign up to start trading {a.name}.</p>

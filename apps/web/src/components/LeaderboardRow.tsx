@@ -20,13 +20,16 @@ export function LeaderboardRow({ row }: { row: MockLeaderboardRow }) {
         <div className="truncate text-sm font-bold">
           {row.user}
           {row.isYou && <span className="ml-1.5 text-xs font-medium text-muted-foreground">(you)</span>}
+          {row.isMock && (
+            <span className="ml-1.5 text-xs font-medium text-muted-foreground">(sample)</span>
+          )}
         </div>
         {row.note && <div className="truncate text-xs text-muted-foreground">{row.note}</div>}
       </div>
       <div
         className={cn(
           "shrink-0 text-sm font-extrabold",
-          row.stat.trim().startsWith("-") ? "text-destructive" : "text-positive",
+          row.pctValue < 0 ? "text-destructive" : "text-positive",
         )}
       >
         {row.stat}

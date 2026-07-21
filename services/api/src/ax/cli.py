@@ -34,15 +34,14 @@ from ax.core.index import (
 )
 from ax.core.ledger import grant_entries
 from ax.db.ledger import lock_balance_cache, write_entries
-from ax.db.models import TIER_BLUE_CHIP, TIER_GROWTH, Artist, MetricSnapshot, User
+from ax.db.models import TIER_BLUE_CHIP, Artist, MetricSnapshot, User
 from ax.db.session import get_engine, session_scope
 from ax.jobs.recompute import run_recompute
 from ax.jobs.reconcile import run_reconcile
 from ax.jobs.snapshot import active_artists, run_snapshot
 from ax.logging_config import configure_third_party_logging
-from ax.providers.lastfm import METRIC_LISTENERS, METRIC_PLAYCOUNT
+from ax.providers.lastfm import METRIC_LISTENERS, METRIC_PLAYCOUNT, LastfmProvider
 from ax.providers.lastfm import SOURCE as LASTFM_SOURCE
-from ax.providers.lastfm import LastfmProvider
 from ax.settings import get_settings
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -220,6 +219,18 @@ _BLUE_CHIP_DRIFT_VOL = (0.0008, 0.012)
 _GROWTH_DRIFT_VOL = (0.006, 0.05)
 
 
+def _require_not_production() -> None:
+    """Refuses to proceed with `ENVIRONMENT=production` (CLAUDE.md: fake
+    data must never reach production). Called by every dev-only command
+    directly, not just by `reset`, so running `fake-history` or
+    `simulate-trades` on its own is guarded the same as going through
+    `reset`."""
+    settings = get_settings()
+    if settings.is_production:
+        typer.echo("refusing to run: ENVIRONMENT=production", err=True)
+        raise typer.Exit(code=1)
+
+
 def _fake_history(days: int, seed: int) -> None:
     with session_scope() as session:
         artists = active_artists(session)
@@ -237,7 +248,9 @@ def _fake_history(days: int, seed: int) -> None:
         for artist in artists:
             artist_rng = random.Random(f"{seed}:{artist.slug}")
             lo, hi = (
-                _BLUE_CHIP_LISTENERS_RANGE if artist.tier == TIER_BLUE_CHIP else _GROWTH_LISTENERS_RANGE
+                _BLUE_CHIP_LISTENERS_RANGE
+                if artist.tier == TIER_BLUE_CHIP
+                else _GROWTH_LISTENERS_RANGE
             )
             listeners[artist.id] = artist_rng.uniform(lo, hi)
             playcount[artist.id] = listeners[artist.id] * artist_rng.uniform(8.0, 20.0)
@@ -248,6 +261,7 @@ def _fake_history(days: int, seed: int) -> None:
 
         for offset in range(days):
             as_of_date = start + timedelta(days=offset)
+            rows: list[dict[str, Any]] = []
             for artist in artists:
                 artist_rng = rngs[artist.id]
                 mu, sigma = (
@@ -270,18 +284,26 @@ def _fake_history(days: int, seed: int) -> None:
                     (METRIC_LISTENERS, round(listeners[artist.id])),
                     (METRIC_PLAYCOUNT, round(playcount[artist.id])),
                 ):
-                    stmt = insert(MetricSnapshot).values(
-                        artist_id=artist.id,
-                        as_of_date=as_of_date,
-                        source=LASTFM_SOURCE,
-                        metric_key=metric_key,
-                        value=int(value),
+                    rows.append(
+                        {
+                            "artist_id": artist.id,
+                            "as_of_date": as_of_date,
+                            "source": LASTFM_SOURCE,
+                            "metric_key": metric_key,
+                            "value": int(value),
+                        }
                     )
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=["artist_id", "as_of_date", "source", "metric_key"],
-                        set_={"value": stmt.excluded.value},
-                    )
-                    session.execute(stmt)
+
+            # One bulk upsert per day instead of one per artist per metric
+            # -- `days * len(artists) * 2` individual round trips was the
+            # dominant cost of `fake-history` at the documented 120-day,
+            # 200-artist scale.
+            stmt = insert(MetricSnapshot).values(rows)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["artist_id", "as_of_date", "source", "metric_key"],
+                set_={"value": stmt.excluded.value},
+            )
+            session.execute(stmt)
             session.commit()
 
             # A fixed hour per backfilled day, matching the real nightly
@@ -307,6 +329,7 @@ def fake_history(
     runs, so listing, EWMA carry, quarantine checks, and reversion all
     behave exactly as they would on real data. Deterministic under
     `--seed`. Dev-only -- never run against production (CLAUDE.md)."""
+    _require_not_production()
     _fake_history(days, seed)
 
 
@@ -314,20 +337,24 @@ def _simulate_trades(users: int, days: int, seed: int) -> None:
     with session_scope() as session:
         rng = random.Random(seed)
 
-        sim_users: list[User] = []
-        for i in range(users):
-            username = f"sim_{i:04d}"
-            existing = session.scalars(select(User).where(User.username == username)).one_or_none()
-            if existing is not None:
-                sim_users.append(existing)
-                continue
-            user = User(username=username)
-            session.add(user)
+        # One bulk lookup for all `users` usernames instead of one SELECT
+        # per user, and a single flush + commit for however many are new
+        # instead of one of each per user -- `--users 50` was 50 round
+        # trips of each before this.
+        usernames = [f"sim_{i:04d}" for i in range(users)]
+        by_username: dict[str, User] = {
+            u.username: u for u in session.scalars(select(User).where(User.username.in_(usernames)))
+        }
+        new_users = [User(username=name) for name in usernames if name not in by_username]
+        if new_users:
+            session.add_all(new_users)
             session.flush()
-            balance = lock_balance_cache(session, user.id)
-            write_entries(session, balance, user.id, grant_entries(STARTING_BALANCE_CENTS))
+            for user in new_users:
+                balance = lock_balance_cache(session, user.id)
+                write_entries(session, balance, user.id, grant_entries(STARTING_BALANCE_CENTS))
+                by_username[user.username] = user
             session.commit()
-            sim_users.append(user)
+        sim_users: list[User] = [by_username[name] for name in usernames]
 
         artist_slugs = list(
             session.scalars(
@@ -380,6 +407,7 @@ def simulate_trades(
     (`api.routers.trades.execute_trade`, called directly -- no HTTP),
     producing realistic price history and non-empty portfolios. Requires
     listed artists -- run `ax fake-history` first. Dev-only (CLAUDE.md)."""
+    _require_not_production()
     _simulate_trades(users, days, seed)
 
 
@@ -395,10 +423,7 @@ def reset(
     run with `ENVIRONMENT=production` (CLAUDE.md: fake data must never
     reach production); there is no confirmation prompt beyond that, so
     only ever point this at a local or disposable database."""
-    settings = get_settings()
-    if settings.is_production:
-        typer.echo("refusing to run `ax reset`: ENVIRONMENT=production", err=True)
-        raise typer.Exit(code=1)
+    _require_not_production()
 
     engine = get_engine()
     with engine.begin() as conn:
