@@ -53,6 +53,7 @@ from ax.jobs.recompute import (
     _net_supplies,
     _percentile_move_flags,
     _ratio_divergence_flags,
+    clear_flag,
     run_recompute,
 )
 from tests.conftest import ArtistFactory
@@ -546,6 +547,85 @@ def test_flag_persists_until_manually_cleared(session: Session, make_artist: Art
     # flag in its own right; that's a separate, correctly-functioning
     # check, not evidence the old quarantine failed to clear.)
     assert _effective_fair_value(day10_snap) != day7_snap.fair_value_cents
+
+
+def test_clear_flag_resumes_fresh_computation(session: Session, make_artist: ArtistFactory) -> None:
+    """`clear_flag` (the helper `api/routers/admin.py` and `cli.py`'s
+    `fake-history` auto-clear both share) is the programmatic equivalent
+    of the manual `flag.cleared_at = ...` in the test above -- same
+    end-to-end effect, exercised through the real function instead of a
+    direct attribute assignment."""
+    states = _seed_steady(session, make_artist, count=10, days=8)
+    day7 = _day(7)
+    run_recompute(session, day7, now=_now_for(day7))
+
+    day8 = _day(8)
+    target = states[0]
+    spiked_playcount = target.playcount * target.playcount_growth * 10
+    states[0] = _advance_day(session, target, day8, playcount_override=spiked_playcount)
+    states[1:] = _advance_all(session, states[1:], day8)
+    run_recompute(session, day8, now=_now_for(day8))
+
+    artist_id = states[0].artist.id
+    flag = session.scalar(
+        select(FlaggedArtist).where(
+            FlaggedArtist.artist_id == artist_id, FlaggedArtist.as_of_date == day8
+        )
+    )
+    assert flag is not None and flag.cleared_at is None
+
+    cleared = clear_flag(session, artist_id, day8, cleared_by="ax fake-history")
+    session.flush()
+
+    assert cleared is True
+    session.refresh(flag)
+    assert flag.cleared_at is not None
+    assert flag.cleared_by == "ax fake-history"
+
+    day9 = _day(9)
+    states = _advance_all(session, states, day9)
+    run_recompute(session, day9, now=_now_for(day9))
+    day7_snap = _snapshot(session, artist_id, day7)
+    day9_snap = _snapshot(session, artist_id, day9)
+    assert day7_snap is not None and day9_snap is not None
+    # Cleared immediately after day 8, so day 9's computation is already
+    # fresh -- no lingering hold, unlike the manual-clear test above where
+    # the flag stayed open across day 9.
+    assert _effective_fair_value(day9_snap) != day7_snap.fair_value_cents
+
+
+def test_clear_flag_returns_false_for_no_open_flag(
+    session: Session, make_artist: ArtistFactory
+) -> None:
+    artist = make_artist("Never Flagged")
+    assert clear_flag(session, artist.id, BASE_DATE, cleared_by="someone") is False
+
+
+def test_clear_flag_is_a_noop_on_an_already_cleared_flag(
+    session: Session, make_artist: ArtistFactory
+) -> None:
+    artist = make_artist("Already Cleared")
+    session.add(
+        FlaggedArtist(
+            artist_id=artist.id,
+            as_of_date=BASE_DATE,
+            reason="percentile_move",
+            cleared_at=datetime.now(UTC),
+            cleared_by="reviewer@example.com",
+        )
+    )
+    session.flush()
+
+    assert clear_flag(session, artist.id, BASE_DATE, cleared_by="someone-else") is False
+
+    flag = session.scalar(
+        select(FlaggedArtist).where(
+            FlaggedArtist.artist_id == artist.id, FlaggedArtist.as_of_date == BASE_DATE
+        )
+    )
+    assert flag is not None
+    # The original clearer's attribution is untouched by the no-op call.
+    assert flag.cleared_by == "reviewer@example.com"
 
 
 def test_first_day_flag_stays_warming_up(session: Session, make_artist: ArtistFactory) -> None:

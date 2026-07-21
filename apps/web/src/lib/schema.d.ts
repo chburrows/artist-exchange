@@ -235,6 +235,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/flagged-artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Flagged Artists */
+        get: operations["list_flagged_artists_admin_flagged_artists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/flagged-artists/{artist_id}/{as_of_date}/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clear Flagged Artist */
+        post: operations["clear_flagged_artist_admin_flagged_artists__artist_id___as_of_date__clear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -298,6 +332,28 @@ export interface components {
         EmailRequest: {
             /** Email */
             email: string;
+        };
+        /** FlaggedArtistOut */
+        FlaggedArtistOut: {
+            /** Artist Id */
+            artist_id: number;
+            /** Artist Slug */
+            artist_slug: string;
+            /**
+             * As Of Date
+             * Format: date
+             */
+            as_of_date: string;
+            /** Reason */
+            reason: string;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Cleared At */
+            cleared_at: string | null;
+            /** Cleared By */
+            cleared_by: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -824,6 +880,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_flagged_artists_admin_flagged_artists_get: {
+        parameters: {
+            query?: {
+                include_cleared?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                ax_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlaggedArtistOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_flagged_artist_admin_flagged_artists__artist_id___as_of_date__clear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artist_id: number;
+                as_of_date: string;
+            };
+            cookie?: {
+                ax_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
             /** @description Validation Error */

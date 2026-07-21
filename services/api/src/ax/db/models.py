@@ -20,6 +20,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Date,
     Float,
@@ -54,6 +55,11 @@ class User(Base):
     # call site.
     username: Mapped[str] = mapped_column(CITEXT, unique=True)
     email: Mapped[str | None] = mapped_column(CITEXT, unique=True, nullable=True)
+    # Gates the /admin/* endpoints (`api/deps.py::get_current_admin_user`).
+    # No self-service path to `True` exists anywhere in the app -- only
+    # `ax promote-admin`, run by someone who already has database/deploy
+    # access, same trust tier as applying a migration.
+    is_admin: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 

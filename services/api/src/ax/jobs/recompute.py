@@ -63,7 +63,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -425,6 +425,38 @@ def _upsert_flag(
         set_={"reason": stmt.excluded.reason, "detail": stmt.excluded.detail},
     )
     session.execute(stmt)
+
+
+def clear_flag(session: Session, artist_id: int, as_of_date: date, cleared_by: str) -> bool:
+    """Sets `cleared_at`/`cleared_by` on an open `flagged_artists` row --
+    the one place in the codebase that ever writes those columns.
+
+    Shared by `api/routers/admin.py` (a real admin clearing a real flag)
+    and `cli.py`'s `fake-history` (auto-clearing same-day noise in
+    synthetic backfills, `cleared_by="ax fake-history"`) so the update
+    logic exists exactly once. Takes a plain string rather than a `User`
+    -- neither caller has a `User` row to spare in every case, and the
+    column itself is just an audit-trail string, not a foreign key.
+
+    `clock_timestamp()`, not `now()` (CLAUDE.md rule 9): this can run
+    inside a locked transaction and must record when the clear actually
+    happened, not when the surrounding transaction began.
+
+    Returns whether a row was found and cleared, so a caller (the admin
+    endpoint) can 404 on "no such open flag" instead of silently no-oping.
+    A single `UPDATE ... WHERE cleared_at IS NULL` both locks the row and
+    performs the write -- no separate `SELECT ... FOR UPDATE` needed.
+    """
+    result = session.execute(
+        update(FlaggedArtist)
+        .where(
+            FlaggedArtist.artist_id == artist_id,
+            FlaggedArtist.as_of_date == as_of_date,
+            FlaggedArtist.cleared_at.is_(None),
+        )
+        .values(cleared_at=func.clock_timestamp(), cleared_by=cleared_by)
+    )
+    return result.rowcount > 0  # type: ignore[attr-defined]
 
 
 def _apply_market_state(

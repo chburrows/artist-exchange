@@ -15,6 +15,7 @@ export type UserOut = components["schemas"]["UserOut"];
 export type PortfolioPosition = components["schemas"]["PortfolioPosition"];
 export type TradeSide = components["schemas"]["TradeSide"];
 export type QuoteResponse = components["schemas"]["QuoteResponse"];
+export type FlaggedArtistOut = components["schemas"]["FlaggedArtistOut"];
 
 function unwrap<T>(result: { data?: T; error?: unknown }): T {
   if (result.error) throw result.error;
@@ -170,6 +171,50 @@ export function useExecuteTrade() {
       queryClient.invalidateQueries({ queryKey: ["artist", variables.artistSlug] });
       queryClient.invalidateQueries({ queryKey: ["artist-history", variables.artistSlug] });
       queryClient.invalidateQueries({ queryKey: ["artists"] });
+    },
+  });
+}
+
+// --- admin (oracle-manipulation review queue) --------------------------------
+//
+// A 401/403 here isn't an error state to retry -- it means "not logged in"
+// or "not an admin," both of which the page itself renders explicitly
+// (`useMe` already tells it which). `retry: false` avoids hammering the
+// endpoint with doomed retries in either case.
+
+export class ForbiddenError extends Error {}
+
+export function useFlaggedArtists(enabled: boolean) {
+  return useQuery({
+    queryKey: ["admin", "flagged-artists"],
+    queryFn: async (): Promise<FlaggedArtistOut[]> => {
+      const { data, error, response } = await api.GET("/admin/flagged-artists");
+      // 403 (logged in, not an admin) is a state the page renders
+      // explicitly, not a transient failure -- a distinct error type lets
+      // it tell that apart from a real fetch failure. 401 can't happen
+      // here: `enabled` only turns this query on once `useMe` confirms a
+      // session exists, mirroring `usePortfolio`.
+      if (response.status === 403) throw new ForbiddenError();
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled,
+    staleTime: 5_000,
+    retry: false,
+  });
+}
+
+export function useClearFlaggedArtist() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ artistId, asOfDate }: { artistId: number; asOfDate: string }) =>
+      unwrap(
+        await api.POST("/admin/flagged-artists/{artist_id}/{as_of_date}/clear", {
+          params: { path: { artist_id: artistId, as_of_date: asOfDate } },
+        }),
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "flagged-artists"] });
     },
   });
 }

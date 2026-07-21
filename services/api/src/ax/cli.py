@@ -6,6 +6,10 @@ Phase 3 added `recompute`; Phase 4 added `reconcile`; Phase 5 adds
 PLAN.md's "Local dev and faking history" section describes, needed so
 Phase 5 UI work never waits on real (weeks-long) Last.fm history. All
 three are dev-only: never point them at production (CLAUDE.md).
+
+`promote-admin` is a real production operator command (not dev-only): the
+only way to grant `is_admin`, which gates `/admin/*` (the oracle-
+manipulation review queue's clearing UI).
 """
 
 import csv
@@ -34,9 +38,9 @@ from ax.core.index import (
 )
 from ax.core.ledger import grant_entries
 from ax.db.ledger import lock_balance_cache, write_entries
-from ax.db.models import TIER_BLUE_CHIP, Artist, MetricSnapshot, User
+from ax.db.models import TIER_BLUE_CHIP, Artist, FlaggedArtist, MetricSnapshot, User
 from ax.db.session import get_engine, session_scope
-from ax.jobs.recompute import run_recompute
+from ax.jobs.recompute import clear_flag, run_recompute
 from ax.jobs.reconcile import run_reconcile
 from ax.jobs.snapshot import active_artists, run_snapshot
 from ax.logging_config import configure_third_party_logging
@@ -201,6 +205,25 @@ def reconcile() -> None:
     typer.echo(json.dumps(result.summary(), indent=2))
 
 
+@app.command("promote-admin")
+def promote_admin(
+    username: Annotated[str, typer.Option(help="Existing user to grant admin access")],
+) -> None:
+    """Grants `is_admin` to an existing user -- the only way to create an
+    admin, since the `/admin/*` endpoints have no self-service path to
+    that flag. Meant to be run by whoever already has database/deploy
+    access, the same trust tier as applying a migration; safe to run
+    against production."""
+    with session_scope() as session:
+        user = session.scalar(select(User).where(User.username == username))
+        if user is None:
+            typer.echo(f"no such user: {username}", err=True)
+            raise typer.Exit(code=1)
+        user.is_admin = True
+
+    typer.echo(f"{username} is now an admin.")
+
+
 # --- Fake history + simulated trading (Phase 5 dev-speed unlocks) --------
 #
 # PLAN.md: "generate synthetic metric_snapshots via a GBM walk on
@@ -236,6 +259,29 @@ def _fake_history(days: int, seed: int) -> None:
         artists = active_artists(session)
         if not artists:
             typer.echo("No artists in the universe -- run `ax seed-artists` first.")
+            raise typer.Exit(code=1)
+
+        # `start` below is anchored to wall-clock `today`, so two
+        # invocations on different days map the same per-artist RNG walk
+        # onto *different* calendar dates. Where the new window overlaps
+        # already-published `as_of_date`s, `metric_snapshots` gets
+        # overwritten with the new walk's values but `run_recompute`'s own
+        # idempotency check silently skips re-scoring those dates --
+        # leaving `metric_snapshots` and `index_snapshots`/`price_history`
+        # permanently out of sync, with nothing erroring. `fake-history` is
+        # reset-and-rebuild tooling (PLAN.md), not incremental, so refusing
+        # against a non-fresh universe beats corrupting the alignment.
+        already_seeded = session.scalar(
+            select(MetricSnapshot.artist_id)
+            .where(MetricSnapshot.artist_id.in_([a.id for a in artists]))
+            .limit(1)
+        )
+        if already_seeded is not None:
+            typer.echo(
+                "metric_snapshots already has data -- fake-history is only "
+                "deterministic against a fresh universe. Run `ax reset` first.",
+                err=True,
+            )
             raise typer.Exit(code=1)
 
         # One RNG per artist, seeded from (global seed, slug) so a series
@@ -312,9 +358,33 @@ def _fake_history(days: int, seed: int) -> None:
             # where it ends, same as production.
             recompute_now = datetime.combine(as_of_date, time(7, 0), tzinfo=UTC)
             result = run_recompute(session, as_of_date, now=recompute_now)
+
+            # Synthetic GBM data has no real manipulation to catch -- any
+            # flag `run_recompute` just raised for `as_of_date` is by
+            # construction noise, since PERCENTILE_MOVE_THRESHOLD flags
+            # ~1-2 artists *every* cross-section by design (PLAN.md). A
+            # real deployment assumes a human clears the queue daily
+            # ("a two-minute daily task"); this models that same-day
+            # review for synthetic data so a 120-day backfill doesn't end
+            # with most of the universe permanently quarantined. Still
+            # exercises the real quarantine-hold for that one day (the
+            # score stays frozen for `as_of_date` itself) -- it just stops
+            # the backlog compounding across the whole run.
+            newly_flagged_ids = session.scalars(
+                select(FlaggedArtist.artist_id).where(
+                    FlaggedArtist.as_of_date == as_of_date,
+                    FlaggedArtist.cleared_at.is_(None),
+                )
+            ).all()
+            for artist_id in newly_flagged_ids:
+                clear_flag(session, artist_id, as_of_date, cleared_by="ax fake-history")
+            if newly_flagged_ids:
+                session.commit()
+
             typer.echo(
                 f"{as_of_date}: eligible={result.eligible} published={result.published} "
-                f"held={result.held} newly_listed={len(result.newly_listed)}"
+                f"held={result.held} newly_listed={len(result.newly_listed)} "
+                f"auto_cleared={len(newly_flagged_ids)}"
             )
 
 
@@ -327,8 +397,13 @@ def fake_history(
     listeners, monotonic playcount) and replay the real recompute job over
     each historical date in order -- the same pipeline the nightly job
     runs, so listing, EWMA carry, quarantine checks, and reversion all
-    behave exactly as they would on real data. Deterministic under
-    `--seed`. Dev-only -- never run against production (CLAUDE.md)."""
+    behave exactly as they would on real data. Any same-day quarantine
+    flag is auto-cleared (synthetic data has no real manipulation to
+    catch), so a long backfill doesn't end with most of the universe
+    permanently frozen. Deterministic under `--seed`, but only against a
+    fresh universe -- refuses if `metric_snapshots` already has data; run
+    `ax reset` first. Dev-only -- never run against production
+    (CLAUDE.md)."""
     _require_not_production()
     _fake_history(days, seed)
 

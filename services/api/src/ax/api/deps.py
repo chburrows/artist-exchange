@@ -176,3 +176,18 @@ def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+def get_current_admin_user(user: CurrentUserDep) -> User:
+    """Layers on `get_current_user`: 401 if not logged in (unchanged),
+    403 if logged in but not an admin -- the first use of 403 in this API.
+    401 and 403 are deliberately distinct here, unlike the "don't leak
+    which case it was" choice above: an admin-only route telling a
+    logged-in non-admin "you're not authenticated" would be actively
+    misleading, not a useful ambiguity."""
+    if not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin access required")
+    return user
+
+
+CurrentAdminDep = Annotated[User, Depends(get_current_admin_user)]
