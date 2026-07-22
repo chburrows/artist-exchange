@@ -5,8 +5,14 @@ import Link from "next/link";
 import { ArtistCard } from "@/components/ArtistCard";
 import { HoldingRow } from "@/components/HoldingRow";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
+import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { formatCents, formatPct, pctChange } from "@/lib/format";
-import { mockDailyChangePct, mockDayChangeCents, mockTalentScoutScore } from "@/lib/mock-discovery";
+import {
+  mockDailyChangePct,
+  mockDayChangeCents,
+  mockPortfolioHistory,
+  mockTalentScoutScore,
+} from "@/lib/mock-discovery";
 import { useArtists, useMe, usePortfolio } from "@/lib/queries";
 
 export default function HomePage() {
@@ -30,6 +36,8 @@ function HomeDashboard({ userId, username }: { userId: number; username: string 
   const dayChangeCents = mockDayChangeCents(userId, equityCents);
   const dayChangePct =
     equityCents > dayChangeCents ? pctChange(equityCents - dayChangeCents, equityCents) : 0;
+
+  const history = mockPortfolioHistory(userId, equityCents).slice(-30);
 
   const bestCall = [...positions].sort((a, b) => {
     const pctA = pctChange(a.avg_cost_cents, a.spot_price_cents);
@@ -55,6 +63,12 @@ function HomeDashboard({ userId, username }: { userId: number; username: string 
         <div className={`text-sm font-bold ${dayChangeCents >= 0 ? "text-positive" : "text-destructive"}`}>
           {formatCents(dayChangeCents)} ({formatPct(dayChangePct)}) today
         </div>
+
+        {positions.length > 0 && (
+          <div className="mt-3">
+            <PortfolioValueChart points={history} positive={dayChangeCents >= 0} height={72} />
+          </div>
+        )}
 
         {bestCall && (
           <div className="mt-3 border-t border-border pt-3">

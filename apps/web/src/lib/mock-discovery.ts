@@ -10,6 +10,7 @@
  *   - mockDailyChangePct   -> a real day-over-day price diff, or the MV
  *   - mockTalentScoutScore -> the real Talent Scout formula/leaderboard
  *   - mockDayChangeCents   -> a stored daily equity snapshot
+ *   - mockPortfolioHistory -> a stored daily equity snapshot series
  *   - MOCK_*_LEADERBOARD   -> GET /leaderboard/portfolio, /leaderboard/scout
  */
 
@@ -42,6 +43,35 @@ export function mockTalentScoutScore(userId: number): { score: number; percentil
 export function mockDayChangeCents(userId: number, equityCents: number): number {
   const f = seededFraction(userId * 13 + 1) - 0.5;
   return Math.round(equityCents * f * 0.06);
+}
+
+export interface PortfolioHistoryPoint {
+  /** 0 = today, increasing into the past. */
+  daysAgo: number;
+  valueCents: number;
+}
+
+const PORTFOLIO_HISTORY_DAYS = 90;
+
+/** Deterministic daily-equity walk ending at the real current equity, per
+ * user id -- the multi-day counterpart of `mockDayChangeCents` for the
+ * Portfolio performance chart and its range selector. Always generates
+ * the same 90-day span; range tabs longer than that (1Y, ALL) simply
+ * show the full span, same as `changeSince`'s `sinceInception` case in
+ * `format.ts` for a product this early in its real history. */
+export function mockPortfolioHistory(userId: number, equityCents: number): PortfolioHistoryPoint[] {
+  const values: number[] = [];
+  let v = equityCents * 0.6;
+  for (let i = 0; i < PORTFOLIO_HISTORY_DAYS; i++) {
+    const f = seededFraction(userId * 1_009 + i * 97 + 3);
+    v += (f - 0.44) * (equityCents * 0.02);
+    values.push(Math.max(v, equityCents * 0.15));
+  }
+  values[PORTFOLIO_HISTORY_DAYS - 1] = equityCents;
+  return values.map((valueCents, i) => ({
+    daysAgo: PORTFOLIO_HISTORY_DAYS - 1 - i,
+    valueCents: Math.round(valueCents),
+  }));
 }
 
 export interface MockLeaderboardRow {
