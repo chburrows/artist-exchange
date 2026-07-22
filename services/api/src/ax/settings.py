@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     # custom domain address before this needs to reach real users.
     email_from_address: str = "Artist Exchange <onboarding@resend.dev>"
 
+    # "console" writes magic links to `email_log_path` instead of sending
+    # them — local dev and Playwright's magic-link-recovery spec use this
+    # to get a real, consumable token with no inbox and no Resend quota.
+    # Nothing in the Railway config ever sets this; `get_email_provider`
+    # (`api/deps.py`) additionally refuses it outright whenever
+    # `is_production` is true, so a misconfigured production environment
+    # can't silently stop delivering real magic links.
+    email_provider: Literal["resend", "console"] = "resend"
+    email_log_path: str = "/tmp/ax-email-log.jsonl"
+
     # Bearer token for /internal/jobs/*. Empty is refused at request time
     # rather than at import time, so tests and `--help` still work without it.
     internal_job_token: str = ""

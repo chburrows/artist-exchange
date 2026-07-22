@@ -49,6 +49,40 @@ def latest_price_history_rows(session: Session, artist_ids: list[int]) -> dict[i
     return {row.artist_id: row for row in session.scalars(stmt)}
 
 
+def price_history_near(
+    session: Session, artist_ids: list[int], cutoff: datetime
+) -> dict[int, PriceHistory]:
+    """Each artist's `price_history` row nearest to (at-or-before) `cutoff`
+    -- the baseline `api/routers/artists.py` diffs the current spot price
+    against for `ArtistOut.daily_change_pct`. Falls back to the artist's
+    earliest row (its listing) when nothing is that old yet, same
+    "since inception" fallback `apps/web/src/lib/format.ts::changeSince`
+    already uses client-side for the artist detail page -- an artist
+    listed less than `cutoff` ago legitimately has no older price to
+    diff against."""
+    if not artist_ids:
+        return {}
+    stmt = (
+        select(PriceHistory)
+        .distinct(PriceHistory.artist_id)
+        .where(PriceHistory.artist_id.in_(artist_ids), PriceHistory.at <= cutoff)
+        .order_by(PriceHistory.artist_id, PriceHistory.at.desc(), PriceHistory.id.desc())
+    )
+    rows = {row.artist_id: row for row in session.scalars(stmt)}
+
+    missing = [aid for aid in artist_ids if aid not in rows]
+    if missing:
+        earliest_stmt = (
+            select(PriceHistory)
+            .distinct(PriceHistory.artist_id)
+            .where(PriceHistory.artist_id.in_(missing))
+            .order_by(PriceHistory.artist_id, PriceHistory.at.asc(), PriceHistory.id.asc())
+        )
+        rows.update({row.artist_id: row for row in session.scalars(earliest_stmt)})
+
+    return rows
+
+
 def net_supplies_from_ledger(session: Session, artist_ids: list[int]) -> dict[int, int]:
     """The same quantity as `latest_price_history_rows(...).net_supply`,
     derived independently from the ledger instead -- used by

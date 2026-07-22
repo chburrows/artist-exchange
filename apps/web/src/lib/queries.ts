@@ -16,6 +16,9 @@ export type PortfolioPosition = components["schemas"]["PortfolioPosition"];
 export type TradeSide = components["schemas"]["TradeSide"];
 export type QuoteResponse = components["schemas"]["QuoteResponse"];
 export type FlaggedArtistOut = components["schemas"]["FlaggedArtistOut"];
+export type EquityPoint = components["schemas"]["EquityPoint"];
+export type PortfolioLeaderboardRow = components["schemas"]["PortfolioLeaderboardRow"];
+export type ScoutLeaderboardRow = components["schemas"]["ScoutLeaderboardRow"];
 
 function unwrap<T>(result: { data?: T; error?: unknown }): T {
   if (result.error) throw result.error;
@@ -121,6 +124,44 @@ export function usePortfolio(enabled: boolean) {
     queryFn: async () => unwrap(await api.GET("/portfolio")),
     enabled,
     staleTime: 5_000,
+  });
+}
+
+/** Real daily equity history (PLAN.md Phase 6), written nightly by
+ * `jobs/leaderboard.py` -- empty for an account that predates tonight's
+ * first run. `PortfolioValueChart` already renders an honest "not enough
+ * history yet" state for fewer than two points, so an empty array needs
+ * no special handling here. */
+export function usePortfolioHistory(enabled: boolean) {
+  return useQuery({
+    queryKey: ["portfolio-history"],
+    queryFn: async () => unwrap(await api.GET("/portfolio/history")),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+// --- leaderboards (PLAN.md Phase 6) ------------------------------------
+//
+// Both public: browsable with no account. Reads a table `jobs/leaderboard.py`
+// refreshes once a night -- staleness up to a day old is expected, not a
+// bug (PLAN.md: "leaderboards are the one place staleness is genuinely
+// fine"). `you` comes back populated whenever the caller has a session
+// and a snapshot exists for them, even if they fall outside `rows`.
+
+export function usePortfolioLeaderboard() {
+  return useQuery({
+    queryKey: ["leaderboard", "portfolio"],
+    queryFn: async () => unwrap(await api.GET("/leaderboard/portfolio")),
+    staleTime: 60_000,
+  });
+}
+
+export function useScoutLeaderboard() {
+  return useQuery({
+    queryKey: ["leaderboard", "scout"],
+    queryFn: async () => unwrap(await api.GET("/leaderboard/scout")),
+    staleTime: 60_000,
   });
 }
 

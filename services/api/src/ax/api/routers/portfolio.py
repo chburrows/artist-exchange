@@ -1,5 +1,7 @@
 """`GET /portfolio` (PLAN.md Phase 4): cash plus every held position,
-marked to the current spot price.
+marked to the current spot price. `GET /portfolio/history` (Phase 6):
+the daily equity series `jobs/leaderboard.py` snapshots nightly, behind
+the Portfolio page's range-selector chart.
 
 Reads `balance_cache`/`position_cache` -- the O(1) derived-from-the-
 ledger path (CLAUDE.md rule 8) -- never the ledger itself. A portfolio
@@ -14,9 +16,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from ax.api.deps import CurrentUserDep, DbDep
-from ax.core.money import uc_to_cents_nearest
-from ax.db.market import latest_price_history_rows, spot_cents
-from ax.db.models import Artist, BalanceCache, PositionCache
+from ax.db.models import EquitySnapshot
+from ax.db.portfolio import compute_portfolio_snapshot
 
 router = APIRouter(tags=["portfolio"])
 
@@ -41,46 +42,58 @@ class PortfolioResponse(BaseModel):
 
 @router.get("/portfolio")
 def get_portfolio(db: DbDep, user: CurrentUserDep) -> PortfolioResponse:
-    now = datetime.now(UTC)
-
-    balance = db.get(BalanceCache, user.id)
-    cash_cents = balance.cash_cents if balance is not None else 0
-
-    position_rows = list(
-        db.scalars(
-            select(PositionCache).where(PositionCache.user_id == user.id, PositionCache.shares > 0)
-        )
-    )
-    artist_ids = [row.artist_id for row in position_rows]
-    artists = {a.id: a for a in db.scalars(select(Artist).where(Artist.id.in_(artist_ids)))}
-    price_rows = latest_price_history_rows(db, artist_ids)
-
-    positions: list[PortfolioPosition] = []
-    equity_cents = cash_cents
-    for row in position_rows:
-        artist = artists.get(row.artist_id)
-        price_row = price_rows.get(row.artist_id)
-        if artist is None or price_row is None:
-            continue
-
-        spot_price_cents = spot_cents(artist, price_row.net_supply, now)
-        market_value_cents = row.shares * spot_price_cents
-        avg_cost_cents = uc_to_cents_nearest(row.avg_cost_microcents)
-        unrealized_pnl_cents = market_value_cents - row.shares * avg_cost_cents
-
-        equity_cents += market_value_cents
-        positions.append(
+    snapshot = compute_portfolio_snapshot(db, user.id, datetime.now(UTC))
+    return PortfolioResponse(
+        cash_cents=snapshot.cash_cents,
+        equity_cents=snapshot.equity_cents,
+        positions=[
             PortfolioPosition(
-                artist_slug=artist.slug,
-                artist_name=artist.name,
-                shares=row.shares,
-                avg_cost_cents=avg_cost_cents,
-                spot_price_cents=spot_price_cents,
-                market_value_cents=market_value_cents,
-                unrealized_pnl_cents=unrealized_pnl_cents,
-                realized_pnl_cents=row.realized_pnl_cents,
-                scout_shares=row.scout_shares,
+                artist_slug=p.artist_slug,
+                artist_name=p.artist_name,
+                shares=p.shares,
+                avg_cost_cents=p.avg_cost_cents,
+                spot_price_cents=p.spot_price_cents,
+                market_value_cents=p.market_value_cents,
+                unrealized_pnl_cents=p.unrealized_pnl_cents,
+                realized_pnl_cents=p.realized_pnl_cents,
+                scout_shares=p.scout_shares,
             )
-        )
+            for p in snapshot.positions
+        ],
+    )
 
-    return PortfolioResponse(cash_cents=cash_cents, equity_cents=equity_cents, positions=positions)
+
+class EquityPoint(BaseModel):
+    as_of_date: str
+    equity_cents: int
+    cash_cents: int
+
+
+class PortfolioHistoryResponse(BaseModel):
+    points: list[EquityPoint]
+
+
+@router.get("/portfolio/history")
+def get_portfolio_history(db: DbDep, user: CurrentUserDep) -> PortfolioHistoryResponse:
+    """Real daily equity, oldest first -- written by `jobs/leaderboard.py`,
+    not computed live. A brand-new account, or one that signed up before
+    tonight's job has run once, legitimately has zero points: the
+    frontend's `PortfolioValueChart` already renders an honest "not
+    enough history yet" state for fewer than two points, so there is
+    nothing to backfill or fake here (CLAUDE.md: an honest absence beats
+    a stub)."""
+    stmt = (
+        select(EquitySnapshot)
+        .where(EquitySnapshot.user_id == user.id)
+        .order_by(EquitySnapshot.as_of_date)
+    )
+    return PortfolioHistoryResponse(
+        points=[
+            EquityPoint(
+                as_of_date=row.as_of_date.isoformat(),
+                equity_cents=row.equity_cents,
+                cash_cents=row.cash_cents,
+            )
+            for row in db.scalars(stmt)
+        ]
+    )

@@ -40,6 +40,7 @@ from ax.core.ledger import grant_entries
 from ax.db.ledger import lock_balance_cache, write_entries
 from ax.db.models import TIER_BLUE_CHIP, Artist, FlaggedArtist, MetricSnapshot, User
 from ax.db.session import get_engine, session_scope
+from ax.jobs.leaderboard import run_leaderboard_snapshot
 from ax.jobs.recompute import clear_flag, run_recompute
 from ax.jobs.reconcile import run_reconcile
 from ax.jobs.snapshot import active_artists, run_snapshot
@@ -201,6 +202,27 @@ def reconcile() -> None:
     """
     with session_scope() as session:
         result = run_reconcile(session, now=datetime.now(UTC))
+
+    typer.echo(json.dumps(result.summary(), indent=2))
+
+
+@app.command("leaderboard")
+def leaderboard(
+    as_of: Annotated[
+        datetime | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Date to snapshot (default: today UTC)"),
+    ] = None,
+) -> None:
+    """Run the nightly leaderboard snapshot locally, without HTTP.
+
+    Same code path `/internal/jobs/leaderboard` uses: writes tonight's
+    `equity_snapshots` row for every user and rebuilds `leaderboard_scout`
+    from current `position_cache` state. Run after `reconcile`.
+    """
+    as_of_date: date = as_of.date() if as_of else datetime.now(UTC).date()
+
+    with session_scope() as session:
+        result = run_leaderboard_snapshot(session, as_of_date, now=datetime.now(UTC))
 
     typer.echo(json.dumps(result.summary(), indent=2))
 
@@ -442,9 +464,20 @@ def _simulate_trades(users: int, days: int, seed: int) -> None:
             typer.echo("No listed artists -- run `ax fake-history` first.")
             raise typer.Exit(code=1)
 
+        # Spread over `days` calendar days ending today, same stepping
+        # `_fake_history` uses -- so `ax reset`'s equity_snapshots history
+        # (and therefore the Portfolio page's chart and both leaderboards)
+        # has `days` real-looking points instead of being empty until
+        # `days` real nights pass. Trades themselves still execute against
+        # the actual current market state (`execute_trade` has no
+        # backdating hook) -- only the snapshot's `as_of_date` label is
+        # historical, same caveat as everything else `ax reset` fabricates.
+        today = datetime.now(UTC).date()
+        start = today - timedelta(days=days - 1)
+
         succeeded = 0
         rejected = 0
-        for _round in range(days):
+        for day_offset in range(days):
             for user in sim_users:
                 slug = rng.choice(artist_slugs)
                 side = TradeSide.buy if rng.random() < 0.65 else TradeSide.sell
@@ -468,6 +501,10 @@ def _simulate_trades(users: int, days: int, seed: int) -> None:
                     # sometimes. `execute_trade` already rolled back
                     # before raising.
                     rejected += 1
+
+            run_leaderboard_snapshot(
+                session, start + timedelta(days=day_offset), now=datetime.now(UTC)
+            )
 
         typer.echo(f"trades: {succeeded} succeeded, {rejected} rejected by guardrails (expected)")
 

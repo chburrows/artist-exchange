@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "generate:api": "openapi-typescript ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}/openapi.json -o src/lib/schema.d.ts"
+    "generate:api": "openapi-typescript ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}/openapi.json -o src/lib/schema.d.ts",
+    "e2e": "node e2e/prepare-db.mjs && playwright test"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.20",
@@ -24,6 +25,7 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",

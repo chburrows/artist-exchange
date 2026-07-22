@@ -235,6 +235,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Portfolio History
+         * @description Real daily equity, oldest first -- written by `jobs/leaderboard.py`,
+         *     not computed live. A brand-new account, or one that signed up before
+         *     tonight's job has run once, legitimately has zero points: the
+         *     frontend's `PortfolioValueChart` already renders an honest "not
+         *     enough history yet" state for fewer than two points, so there is
+         *     nothing to backfill or fake here (CLAUDE.md: an honest absence beats
+         *     a stub).
+         */
+        get: operations["get_portfolio_history_portfolio_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/flagged-artists": {
         parameters: {
             query?: never;
@@ -263,6 +289,40 @@ export interface paths {
         put?: never;
         /** Clear Flagged Artist */
         post: operations["clear_flagged_artist_admin_flagged_artists__artist_id___as_of_date__clear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leaderboard/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio Leaderboard */
+        get: operations["get_portfolio_leaderboard_leaderboard_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leaderboard/scout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Scout Leaderboard */
+        get: operations["get_scout_leaderboard_leaderboard_scout_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -318,6 +378,8 @@ export interface components {
             index_score: number | null;
             /** Fair Value Cents */
             fair_value_cents: number | null;
+            /** Daily Change Pct */
+            daily_change_pct: number | null;
         };
         /** ConsumeResponse */
         ConsumeResponse: {
@@ -332,6 +394,15 @@ export interface components {
         EmailRequest: {
             /** Email */
             email: string;
+        };
+        /** EquityPoint */
+        EquityPoint: {
+            /** As Of Date */
+            as_of_date: string;
+            /** Equity Cents */
+            equity_cents: number;
+            /** Cash Cents */
+            cash_cents: number;
         };
         /** FlaggedArtistOut */
         FlaggedArtistOut: {
@@ -382,6 +453,30 @@ export interface components {
             /** Points */
             points: components["schemas"]["HistoryPoint"][];
         };
+        /** PortfolioHistoryResponse */
+        PortfolioHistoryResponse: {
+            /** Points */
+            points: components["schemas"]["EquityPoint"][];
+        };
+        /** PortfolioLeaderboardResponse */
+        PortfolioLeaderboardResponse: {
+            /** As Of Date */
+            as_of_date: string | null;
+            /** Rows */
+            rows: components["schemas"]["PortfolioLeaderboardRow"][];
+            you: components["schemas"]["PortfolioLeaderboardRow"] | null;
+        };
+        /** PortfolioLeaderboardRow */
+        PortfolioLeaderboardRow: {
+            /** Rank */
+            rank: number;
+            /** Username */
+            username: string;
+            /** Return Bps */
+            return_bps: number;
+            /** Is You */
+            is_you: boolean;
+        };
         /** PortfolioPosition */
         PortfolioPosition: {
             /** Artist Slug */
@@ -431,6 +526,31 @@ export interface components {
             spot_after_cents: number;
             /** Violations */
             violations: string[];
+        };
+        /** ScoutLeaderboardResponse */
+        ScoutLeaderboardResponse: {
+            /** As Of Date */
+            as_of_date: string | null;
+            /** Rows */
+            rows: components["schemas"]["ScoutLeaderboardRow"][];
+            you: components["schemas"]["ScoutLeaderboardRow"] | null;
+        };
+        /** ScoutLeaderboardRow */
+        ScoutLeaderboardRow: {
+            /** Rank */
+            rank: number;
+            /** Username */
+            username: string;
+            /** Artist Slug */
+            artist_slug: string;
+            /** Artist Name */
+            artist_name: string;
+            /** Entry Price Cents */
+            entry_price_cents: number;
+            /** Return Bps */
+            return_bps: number;
+            /** Is You */
+            is_you: boolean;
         };
         /** SignupRequest */
         SignupRequest: {
@@ -893,6 +1013,37 @@ export interface operations {
             };
         };
     };
+    get_portfolio_history_portfolio_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                ax_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_flagged_artists_admin_flagged_artists_get: {
         parameters: {
             query?: {
@@ -949,6 +1100,68 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_leaderboard_leaderboard_portfolio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                ax_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioLeaderboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scout_leaderboard_leaderboard_scout_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                ax_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoutLeaderboardResponse"];
                 };
             };
             /** @description Validation Error */

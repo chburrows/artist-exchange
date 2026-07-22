@@ -152,10 +152,47 @@ jobs:
           echo "All 3 attempts failed."
           exit 1
 
+      - name: POST /internal/jobs/leaderboard
+        id: leaderboard
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          INTERNAL_JOB_TOKEN: ${{ secrets.INTERNAL_JOB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          url="${API_BASE_URL%/}/internal/jobs/leaderboard"
+
+          # Same retry/backoff shape as the steps above. Re-running is
+          # always safe: equity_snapshots upserts on (user_id, as_of_date)
+          # and leaderboard_scout is fully rebuilt from position_cache
+          # every run, so a retry converges to the same state rather than
+          # duplicating or compounding anything.
+          for attempt in 1 2 3; do
+            echo "Attempt ${attempt}: POST ${url}"
+
+            if curl --fail-with-body --silent --show-error \
+                    --max-time 600 \
+                    --request POST \
+                    --header "Authorization: Bearer ${INTERNAL_JOB_TOKEN}" \
+                    "${url}" | tee response.json; then
+              echo
+              echo "Leaderboard snapshot succeeded on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Attempt ${attempt} failed."
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+
+          echo "All 3 attempts failed."
+          exit 1
+
       - name: Report failure
         if: failure()
         run: |
-          echo "::error title=Nightly snapshot/recompute/reconcile failed::\
+          echo "::error title=Nightly snapshot/recompute/reconcile/leaderboard failed::\
           The nightly pipeline did not complete. If the snapshot step \
           failed: Last.fm has no history API, so this day cannot be \
           backfilled from upstream. If recompute failed after a \
@@ -163,6 +200,9 @@ jobs:
           index_snapshots/price_history for this date are stale. If \
           reconcile failed: balance_cache/position_cache may be stale \
           until the next successful run, but transactions (the ledger \
-          itself) is untouched either way. Re-run this workflow via \
-          workflow_dispatch as soon as possible — every step is safe to \
-          re-run."
+          itself) is untouched either way. If leaderboard failed: last \
+          night's equity_snapshots/leaderboard_scout state is served \
+          until the next successful run -- stale, not wrong, since \
+          leaderboards are the one place PLAN.md accepts staleness. \
+          Re-run this workflow via workflow_dispatch as soon as possible \
+          — every step is safe to re-run."

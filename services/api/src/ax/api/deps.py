@@ -16,7 +16,12 @@ from ax.db.models import Session as SessionModel
 from ax.db.models import User
 from ax.db.session import get_db
 from ax.providers.base import MetricProvider, ProviderAuthError
-from ax.providers.email import EmailAuthError, EmailProvider, ResendEmailProvider
+from ax.providers.email import (
+    ConsoleEmailProvider,
+    EmailAuthError,
+    EmailProvider,
+    ResendEmailProvider,
+)
 from ax.providers.lastfm import LastfmProvider
 from ax.settings import Settings, get_settings
 
@@ -71,10 +76,26 @@ def get_email_provider(settings: SettingsDep) -> Iterator[EmailProvider]:
     reason `get_metric_provider` is: auth routes' tests substitute a fake
     and exercise signup/attach/recovery without a real network call.
 
-    Unlike `get_metric_provider`, this does not close its client on
-    teardown: the client is the process-lifetime singleton above, shared
-    across every request, not owned by this one provider instance --
-    closing it here would break every subsequent request."""
+    `settings.email_provider == "console"` swaps in `ConsoleEmailProvider`
+    (local dev / Playwright's magic-link spec, never production -- see
+    `Settings.email_provider`'s docstring). Refused outright whenever
+    `is_production` is true, rather than trusted, so a stray
+    `EMAIL_PROVIDER=console` in a misconfigured production environment
+    can't silently stop real magic links from being delivered.
+
+    Unlike `get_metric_provider`, the Resend path does not close its
+    client on teardown: the client is the process-lifetime singleton
+    above, shared across every request, not owned by this one provider
+    instance -- closing it here would break every subsequent request."""
+    if settings.email_provider == "console":
+        if settings.is_production:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="EMAIL_PROVIDER=console is refused in production",
+            )
+        yield ConsoleEmailProvider(settings.email_log_path)
+        return
+
     try:
         provider = ResendEmailProvider(
             settings.resend_api_key,
@@ -176,6 +197,36 @@ def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+def get_current_user_optional(
+    db: DbDep,
+    session_secret: SessionSecretDep,
+    ax_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
+) -> User | None:
+    """`get_current_user` without the 401 -- for endpoints that are public
+    but personalize when a session happens to be present (Phase 6's
+    leaderboards: browsable by anyone, but splice in "your" rank if
+    you're logged in). A missing or garbage cookie both resolve to `None`
+    here, same as they resolve to the same 401 in `get_current_user`."""
+    if not ax_session:
+        return None
+
+    token_hash = hash_token(session_secret, ax_session)
+    now = datetime.now(UTC)
+    stmt = (
+        select(User)
+        .join(SessionModel, SessionModel.user_id == User.id)
+        .where(
+            SessionModel.token_hash == token_hash,
+            SessionModel.revoked_at.is_(None),
+            SessionModel.expires_at > now,
+        )
+    )
+    return db.scalars(stmt).one_or_none()
+
+
+CurrentUserOptionalDep = Annotated[User | None, Depends(get_current_user_optional)]
 
 
 def get_current_admin_user(user: CurrentUserDep) -> User:

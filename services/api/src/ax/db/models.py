@@ -336,6 +336,67 @@ class BalanceCache(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 
+class EquitySnapshot(Base):
+    """One row per user per day: cash + every position marked to spot,
+    written nightly by `jobs/leaderboard.py` (PLAN.md Phase 6). This is
+    what makes the Portfolio page's range-selector chart real history
+    instead of a client-side fake, and is the source the portfolio-return
+    leaderboard ranks against -- "leaderboards are the one place
+    staleness is genuinely fine" (PLAN.md), so ranking off last night's
+    snapshot rather than a live recompute is deliberate, not a shortcut.
+
+    The composite primary key is the idempotency mechanism, same shape as
+    `metric_snapshots` (CLAUDE.md rule 7): a retried job run upserts, it
+    never appends a second row for a night already recorded.
+    """
+
+    __tablename__ = "equity_snapshots"
+    __table_args__ = (Index("ix_equity_snapshots_as_of_date", "as_of_date"),)
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    as_of_date: Mapped[date] = mapped_column(Date, primary_key=True)
+
+    equity_cents: Mapped[int]
+    cash_cents: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
+class LeaderboardScout(Base):
+    """One row per user: their single best *currently held*
+    scout-qualified position (PLAN.md Phase 6's Talent Scout
+    leaderboard), fully rebuilt every night by `jobs/leaderboard.py`
+    rather than upserted incrementally -- a user whose best find was sold
+    must disappear from the table, not linger with a stale row, so the
+    job deletes and reinserts the whole table each run instead of
+    accumulating rows the way `flagged_artists` did before Phase 3's
+    quarantine-accumulation fix. No `as_of_date` in the primary key: this
+    is a ranking of *current* state, not a time series, so there is
+    nothing to key a history off of.
+
+    `return_bps` and `entry_price_cents` are computed from
+    `position_cache.avg_cost_microcents` -- the position's single
+    blended weighted-average cost, not a cost basis tracked separately
+    for just the scout-qualified shares (no such thing exists in the
+    schema). Same approximation CLAUDE.md's cost-basis rule already
+    accepts elsewhere ("weighted average, not FIFO lots").
+    """
+
+    __tablename__ = "leaderboard_scout"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    best_artist_id: Mapped[int] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"))
+
+    entry_price_cents: Mapped[int]
+    return_bps: Mapped[int]
+    scout_shares: Mapped[int]
+    as_of_date: Mapped[date] = mapped_column(Date)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
 class FlaggedArtist(Base):
     """Oracle-manipulation review queue (Phase 3).
 

@@ -8,12 +8,12 @@ import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { formatCents, formatPct, pctChange } from "@/lib/format";
 import {
-  mockDailyChangePct,
-  mockDayChangeCents,
-  mockPortfolioHistory,
-  mockTalentScoutScore,
-} from "@/lib/mock-discovery";
-import { useArtists, useMe, usePortfolio } from "@/lib/queries";
+  useArtists,
+  useMe,
+  usePortfolio,
+  usePortfolioHistory,
+  useScoutLeaderboard,
+} from "@/lib/queries";
 
 export default function HomePage() {
   const me = useMe();
@@ -24,20 +24,28 @@ export default function HomePage() {
   if (!me.data) {
     return <OnboardingScreen />;
   }
-  return <HomeDashboard userId={me.data.id} username={me.data.username} />;
+  return <HomeDashboard username={me.data.username} />;
 }
 
-function HomeDashboard({ userId, username }: { userId: number; username: string }) {
+function HomeDashboard({ username }: { username: string }) {
   const portfolio = usePortfolio(true);
   const artists = useArtists("growth");
+  const history = usePortfolioHistory(true);
+  const scoutLeaderboard = useScoutLeaderboard();
 
   const positions = portfolio.data?.positions ?? [];
   const equityCents = portfolio.data?.equity_cents ?? 0;
-  const dayChangeCents = mockDayChangeCents(userId, equityCents);
-  const dayChangePct =
-    equityCents > dayChangeCents ? pctChange(equityCents - dayChangeCents, equityCents) : 0;
 
-  const history = mockPortfolioHistory(userId, equityCents).slice(-30);
+  // Real day-over-day change: today's live equity against last night's
+  // nightly snapshot -- absent (not faked) until at least one snapshot
+  // exists for this account.
+  const historyPoints = history.data?.points ?? [];
+  const yesterday = historyPoints[historyPoints.length - 1];
+  const hasDayChange = yesterday !== undefined && yesterday.equity_cents > 0;
+  const dayChangeCents = hasDayChange ? equityCents - yesterday.equity_cents : 0;
+  const dayChangePct = hasDayChange ? pctChange(yesterday.equity_cents, equityCents) : 0;
+
+  const chartPoints = historyPoints.slice(-30).map((p) => ({ valueCents: p.equity_cents }));
 
   const bestCall = [...positions].sort((a, b) => {
     const pctA = pctChange(a.avg_cost_cents, a.spot_price_cents);
@@ -46,10 +54,13 @@ function HomeDashboard({ userId, username }: { userId: number; username: string 
   })[0];
   const bestCallPct = bestCall ? pctChange(bestCall.avg_cost_cents, bestCall.spot_price_cents) : 0;
 
-  const scout = mockTalentScoutScore(userId);
+  const scoutRank = scoutLeaderboard.data?.you?.rank;
+  const scoutReturnPct = scoutLeaderboard.data?.you
+    ? scoutLeaderboard.data.you.return_bps / 100
+    : null;
 
   const discoveryTeaser = (artists.data ?? [])
-    .map((a) => ({ ...a, changePct: mockDailyChangePct(a.slug) }))
+    .map((a) => ({ ...a, changePct: a.daily_change_pct ?? 0 }))
     .sort((a, b) => b.changePct - a.changePct)
     .slice(0, 4);
 
@@ -60,13 +71,17 @@ function HomeDashboard({ userId, username }: { userId: number; username: string 
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="text-xs text-muted-foreground">Your portfolio</div>
         <div className="text-3xl font-extrabold tracking-tight">{formatCents(equityCents)}</div>
-        <div className={`text-sm font-bold ${dayChangeCents >= 0 ? "text-positive" : "text-destructive"}`}>
-          {formatCents(dayChangeCents)} ({formatPct(dayChangePct)}) today
-        </div>
+        {hasDayChange ? (
+          <div className={`text-sm font-bold ${dayChangeCents >= 0 ? "text-positive" : "text-destructive"}`}>
+            {formatCents(dayChangeCents)} ({formatPct(dayChangePct)}) today
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">New today</div>
+        )}
 
-        {positions.length > 0 && (
+        {chartPoints.length > 0 && (
           <div className="mt-3">
-            <PortfolioValueChart points={history} positive={dayChangeCents >= 0} height={72} />
+            <PortfolioValueChart points={chartPoints} positive={dayChangeCents >= 0} height={72} />
           </div>
         )}
 
@@ -103,11 +118,19 @@ function HomeDashboard({ userId, username }: { userId: number; username: string 
           href="/leaderboard"
           className="flex flex-col justify-center rounded-2xl bg-secondary p-4 text-center"
         >
-          <div className="text-[11px] text-muted-foreground">Talent Scout score</div>
-          <div className="text-2xl font-extrabold text-primary">{scout.score}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            top {scout.percentile}% · view leaderboard
-          </div>
+          <div className="text-[11px] text-muted-foreground">Talent Scout</div>
+          {scoutReturnPct !== null ? (
+            <>
+              <div className="text-2xl font-extrabold text-primary">
+                {formatPct(scoutReturnPct)}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                rank #{scoutRank} · view leaderboard
+              </div>
+            </>
+          ) : (
+            <div className="mt-1 text-[11px] text-muted-foreground">view leaderboard →</div>
+          )}
         </Link>
       </div>
 

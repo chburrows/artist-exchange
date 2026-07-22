@@ -1,8 +1,17 @@
 import { avatarStyle } from "@/lib/avatar";
-import type { MockLeaderboardRow } from "@/lib/mock-discovery";
 import { cn } from "@/lib/utils";
 
-export function LeaderboardRow({ row }: { row: MockLeaderboardRow }) {
+export interface LeaderboardRowData {
+  rank: number;
+  username: string;
+  statText: string;
+  /** Numeric form of `statText` -- only its sign is used, to color it. */
+  statValue: number;
+  note?: string;
+  isYou?: boolean;
+}
+
+export function LeaderboardRow({ row }: { row: LeaderboardRowData }) {
   return (
     <div
       className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5", row.isYou && "bg-secondary")}
@@ -12,27 +21,24 @@ export function LeaderboardRow({ row }: { row: MockLeaderboardRow }) {
         aria-hidden
         className="h-8 w-8 shrink-0 rounded-full"
         style={{
-          ...avatarStyle(row.user),
+          ...avatarStyle(row.username),
           boxShadow: row.isYou ? "0 0 0 2px var(--primary)" : undefined,
         }}
       />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-bold">
-          {row.user}
+          {row.username}
           {row.isYou && <span className="ml-1.5 text-xs font-medium text-muted-foreground">(you)</span>}
-          {row.isMock && (
-            <span className="ml-1.5 text-xs font-medium text-muted-foreground">(sample)</span>
-          )}
         </div>
         {row.note && <div className="truncate text-xs text-muted-foreground">{row.note}</div>}
       </div>
       <div
         className={cn(
           "shrink-0 text-sm font-extrabold",
-          row.pctValue < 0 ? "text-destructive" : "text-positive",
+          row.statValue < 0 ? "text-destructive" : "text-positive",
         )}
       >
-        {row.stat}
+        {row.statText}
       </div>
     </div>
   );

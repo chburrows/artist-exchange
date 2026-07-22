@@ -12,8 +12,6 @@ concurrency:
 permissions:
   contents: read
 
-# Playwright e2e joins the `web` job once Phase 5/6 gives it something to
-# click.
 jobs:
   api:
     name: api
@@ -189,6 +187,26 @@ jobs:
   web:
     name: web
     runs-on: ubuntu-latest
+
+    # Playwright's e2e suite (PLAN.md Phase 6) runs against a real API +
+    # Postgres, same shape as the `api` job's service container above --
+    # a mocked backend would leave the signup/buy/chart/leaderboard
+    # wiring it exists to catch completely unverified.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: artist_exchange
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -196,7 +214,23 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
       - run: pnpm install --frozen-lockfile
+      - run: uv sync --locked
       - run: pnpm --filter web lint
       - run: pnpm --filter web exec tsc --noEmit
       - run: pnpm --filter web build
+
+      # System deps only installable here, not in the sandboxed
+      # environment this was developed in -- `--with-deps` needs root.
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: e2e
+        run: pnpm e2e
+        env:
+          # GitHub Actions already sets CI=true, which is what makes
+          # playwright.config.ts's webServer entries start fresh servers
+          # instead of reusing ones from a previous local run.
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/artist_exchange

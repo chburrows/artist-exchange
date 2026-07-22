@@ -11,6 +11,7 @@ failed" (tell the user to retry — a magic link is re-requestable, there
 is nothing to retry automatically on their behalf mid-request).
 """
 
+import json
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -96,3 +97,28 @@ class ResendEmailProvider:
             raise EmailAuthError(f"Resend rejected the API key (HTTP {response.status_code})")
         if response.status_code >= 400:
             raise EmailSendError(f"Resend returned HTTP {response.status_code}: {response.text}")
+
+
+class ConsoleEmailProvider:
+    """Writes each message to a JSON-lines file instead of sending it.
+
+    Local/e2e only -- selected by `EMAIL_PROVIDER=console`
+    (`api/deps.py::get_email_provider`), which nothing in the Railway
+    config ever sets, so production always resolves to `ResendEmailProvider`.
+    Exists for two reasons: it's what Playwright's magic-link-recovery
+    spec reads to get a real token without a real inbox, and it fixes the
+    same annoyance SETUP.md's Phase 4 notes already called out for manual
+    local testing -- consuming a magic link locally previously meant
+    reading the token out of the database or the `/auth/magic-link`
+    response body directly.
+    """
+
+    def __init__(self, log_path: str) -> None:
+        self._log_path = log_path
+
+    def send(self, message: EmailMessage) -> None:
+        with open(self._log_path, "a") as f:
+            f.write(
+                json.dumps({"to": message.to, "subject": message.subject, "html": message.html})
+            )
+            f.write("\n")

@@ -3,7 +3,11 @@
  * publicity exposure). Same input always produces the same avatar, with
  * no network request and no stored image. */
 
-function hashString(input: string): number {
+/** Exported for `ShareCardDialog`, which needs the raw hue pair to draw
+ * the same deterministic identity onto a `<canvas>` -- canvas fill
+ * styles can't consume the CSS `repeating-linear-gradient()` string
+ * `avatarStyle` below produces for the DOM. */
+export function hashString(input: string): number {
   let hash = 0;
   for (let i = 0; i < input.length; i++) {
     hash = (hash << 5) - hash + input.charCodeAt(i);

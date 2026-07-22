@@ -9,7 +9,7 @@ endpoint here, same as PLAN.md's listing rule: there is no price to
 quote and nothing to chart until `MIN_SNAPSHOTS_TO_LIST` is met.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -18,12 +18,24 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ax.api.deps import DbDep
-from ax.db.market import is_tradable, latest_index_snapshots, latest_price_history_rows, spot_cents
+from ax.db.market import (
+    is_tradable,
+    latest_index_snapshots,
+    latest_price_history_rows,
+    price_history_near,
+    spot_cents,
+)
 from ax.db.models import TIER_BLUE_CHIP, TIER_GROWTH, Artist, IndexSnapshot, PriceHistory
 
 router = APIRouter(prefix="/artists", tags=["artists"])
 
 _VALID_TIERS = {TIER_GROWTH, TIER_BLUE_CHIP}
+
+# The Discover page's "biggest movers" / "fastest growing" feeds diff
+# against roughly this far back -- a plain constant here rather than in
+# core/config.py, since this is a display window, not a tuned economic
+# parameter.
+DAILY_CHANGE_WINDOW_HOURS = 24
 
 
 class ArtistOut(BaseModel):
@@ -35,6 +47,12 @@ class ArtistOut(BaseModel):
     net_supply: int
     index_score: float | None
     fair_value_cents: int | None
+    # None only if PriceHistory has literally zero rows for this artist,
+    # which callers never encounter (CLAUDE.md: a listed artist always
+    # has at least one row, written at listing) -- kept optional rather
+    # than asserted so a schema quirk degrades to "no change shown"
+    # instead of a 500.
+    daily_change_pct: float | None
 
 
 class HistoryPoint(BaseModel):
@@ -57,25 +75,36 @@ def _listed_artists_query(tier: str | None) -> Any:
     return stmt.order_by(Artist.slug)
 
 
+def _daily_change_pct(spot_price_cents: int, baseline_row: PriceHistory | None) -> float | None:
+    if baseline_row is None or baseline_row.market_price_cents <= 0:
+        return None
+    return (
+        (spot_price_cents - baseline_row.market_price_cents) / baseline_row.market_price_cents * 100
+    )
+
+
 def _to_out(
     artist: Artist,
     now: datetime,
     price_rows: dict[int, PriceHistory],
     index_rows: dict[int, IndexSnapshot],
+    baseline_rows: dict[int, PriceHistory],
 ) -> ArtistOut:
     price_row = price_rows.get(artist.id)
     net_supply = price_row.net_supply if price_row is not None else 0
     index_row = index_rows.get(artist.id)
     assert artist.listed_at is not None  # every caller pre-filters on this
+    spot_price_cents = spot_cents(artist, net_supply, now)
     return ArtistOut(
         slug=artist.slug,
         name=artist.name,
         tier=artist.tier,
         listed_at=artist.listed_at,
-        spot_price_cents=spot_cents(artist, net_supply, now),
+        spot_price_cents=spot_price_cents,
         net_supply=net_supply,
         index_score=index_row.index_score if index_row is not None else None,
         fair_value_cents=index_row.fair_value_cents if index_row is not None else None,
+        daily_change_pct=_daily_change_pct(spot_price_cents, baseline_rows.get(artist.id)),
     )
 
 
@@ -95,8 +124,11 @@ def list_artists(
     artist_ids = [a.id for a in artists]
     price_rows = latest_price_history_rows(db, artist_ids)
     index_rows = latest_index_snapshots(db, artist_ids)
+    baseline_rows = price_history_near(
+        db, artist_ids, now - timedelta(hours=DAILY_CHANGE_WINDOW_HOURS)
+    )
 
-    return [_to_out(a, now, price_rows, index_rows) for a in artists]
+    return [_to_out(a, now, price_rows, index_rows, baseline_rows) for a in artists]
 
 
 def _get_listed_artist(db: Session, slug: str) -> Artist:
@@ -112,7 +144,10 @@ def get_artist(slug: str, db: DbDep) -> ArtistOut:
     artist = _get_listed_artist(db, slug)
     price_rows = latest_price_history_rows(db, [artist.id])
     index_rows = latest_index_snapshots(db, [artist.id])
-    return _to_out(artist, now, price_rows, index_rows)
+    baseline_rows = price_history_near(
+        db, [artist.id], now - timedelta(hours=DAILY_CHANGE_WINDOW_HOURS)
+    )
+    return _to_out(artist, now, price_rows, index_rows, baseline_rows)
 
 
 @router.get("/{slug}/history")
@@ -121,6 +156,9 @@ def get_artist_history(slug: str, db: DbDep) -> HistoryResponse:
     artist = _get_listed_artist(db, slug)
     price_rows = latest_price_history_rows(db, [artist.id])
     index_rows = latest_index_snapshots(db, [artist.id])
+    baseline_rows = price_history_near(
+        db, [artist.id], now - timedelta(hours=DAILY_CHANGE_WINDOW_HOURS)
+    )
 
     stmt = (
         select(PriceHistory)
@@ -139,6 +177,6 @@ def get_artist_history(slug: str, db: DbDep) -> HistoryResponse:
     ]
 
     return HistoryResponse(
-        artist=_to_out(artist, now, price_rows, index_rows),
+        artist=_to_out(artist, now, price_rows, index_rows, baseline_rows),
         points=points,
     )

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ax.api.deps import MetricProviderDep, require_job_token
 from ax.db.session import get_db
+from ax.jobs.leaderboard import run_leaderboard_snapshot
 from ax.jobs.recompute import run_recompute
 from ax.jobs.reconcile import run_reconcile
 from ax.jobs.snapshot import run_snapshot
@@ -91,4 +92,17 @@ def reconcile(session: DbDep) -> dict[str, Any]:
     data, it checks the whole ledger against the whole cache, as of now.
     """
     result = run_reconcile(session, now=datetime.now(UTC))
+    return result.summary()
+
+
+@router.post("/leaderboard", status_code=status.HTTP_200_OK)
+def leaderboard(session: DbDep, as_of: date | None = None) -> dict[str, Any]:
+    """Snapshot every user's equity and refresh the Talent Scout ranking.
+    Meant to run last in the nightly Action, after `reconcile` -- it reads
+    `balance_cache`/`position_cache`, so it wants those already
+    trustworthy for the night. `as_of` is the same backfill/re-run
+    override the other job endpoints take.
+    """
+    as_of_date = as_of or datetime.now(UTC).date()
+    result = run_leaderboard_snapshot(session, as_of_date, now=datetime.now(UTC))
     return result.summary()

@@ -2,40 +2,50 @@
 
 import { useState } from "react";
 
-import { LeaderboardRow } from "@/components/LeaderboardRow";
+import { LeaderboardRow, type LeaderboardRowData } from "@/components/LeaderboardRow";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { STARTING_BALANCE_CENTS } from "@/lib/constants";
-import { formatPct, pctChange } from "@/lib/format";
-import { MOCK_PORTFOLIO_LEADERBOARD, MOCK_SCOUT_LEADERBOARD } from "@/lib/mock-discovery";
-import { useMe, usePortfolio } from "@/lib/queries";
+import { formatCents, formatPct } from "@/lib/format";
+import {
+  type PortfolioLeaderboardRow,
+  type ScoutLeaderboardRow,
+  usePortfolioLeaderboard,
+  useScoutLeaderboard,
+} from "@/lib/queries";
 
-/** Both tabs are illustrative placeholders (PLAN.md: leaderboards are a
- * Phase 6 nightly materialized view) -- "you" is spliced in using your
- * real portfolio return where that's cheaply available, ranked by that
- * value against the mock rows' own stats rather than at a fixed rank.
- * The mock rows carry `isMock` so they render a "(sample)" tag and are
- * never mistaken for real traders. */
+function toPortfolioRow(row: PortfolioLeaderboardRow): LeaderboardRowData {
+  const pct = row.return_bps / 100;
+  return {
+    rank: row.rank,
+    username: row.username,
+    statText: formatPct(pct),
+    statValue: pct,
+    isYou: row.is_you,
+  };
+}
+
+function toScoutRow(row: ScoutLeaderboardRow): LeaderboardRowData {
+  const pct = row.return_bps / 100;
+  return {
+    rank: row.rank,
+    username: row.username,
+    statText: formatPct(pct),
+    statValue: pct,
+    note: `Found ${row.artist_name} at ${formatCents(row.entry_price_cents)}`,
+    isYou: row.is_you,
+  };
+}
+
+/** Both rankings come straight from `jobs/leaderboard.py`'s nightly
+ * snapshot (PLAN.md Phase 6) -- up to a day stale by design ("the one
+ * place staleness is genuinely fine"), never computed live. `you` is
+ * spliced in by the backend itself (keyed off the session cookie), even
+ * when it falls outside the top slice `rows` returns. */
 export default function LeaderboardPage() {
   const [tab, setTab] = useState<"portfolio" | "scout">("portfolio");
-  const me = useMe();
-  const portfolio = usePortfolio(!!me.data);
+  const portfolio = usePortfolioLeaderboard();
+  const scout = useScoutLeaderboard();
 
-  // .map(), not [...MOCK_PORTFOLIO_LEADERBOARD] -- a shallow copy still
-  // shares row objects with the module-level export, so mutating `.rank`
-  // below would corrupt the shared mock data for every future render.
-  const portfolioRows = MOCK_PORTFOLIO_LEADERBOARD.map((row) => ({ ...row }));
-  if (me.data && portfolio.data) {
-    const pct = pctChange(STARTING_BALANCE_CENTS, portfolio.data.equity_cents);
-    const insertAt = portfolioRows.findIndex((row) => row.pctValue < pct);
-    portfolioRows.splice(insertAt === -1 ? portfolioRows.length : insertAt, 0, {
-      rank: 0,
-      user: me.data.username,
-      stat: formatPct(pct),
-      pctValue: pct,
-      isYou: true,
-    });
-    portfolioRows.forEach((r, i) => (r.rank = i + 1));
-  }
+  const active = tab === "portfolio" ? portfolio : scout;
 
   return (
     <div className="flex flex-col gap-4 pb-6">
@@ -46,11 +56,35 @@ export default function LeaderboardPage() {
         </TabsList>
       </Tabs>
 
-      <div className="flex flex-col gap-1.5">
-        {(tab === "portfolio" ? portfolioRows : MOCK_SCOUT_LEADERBOARD).map((row) => (
-          <LeaderboardRow key={row.rank} row={row} />
-        ))}
-      </div>
+      {active.isLoading ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : active.isError || !active.data ? (
+        <p className="py-10 text-center text-sm text-destructive">Couldn&apos;t load the leaderboard.</p>
+      ) : active.data.as_of_date === null ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No rankings yet -- check back after tonight&apos;s update.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {tab === "portfolio"
+            ? (portfolio.data!.rows as PortfolioLeaderboardRow[]).map((row) => (
+                <LeaderboardRow key={row.rank} row={toPortfolioRow(row)} />
+              ))
+            : (scout.data!.rows as ScoutLeaderboardRow[]).map((row) => (
+                <LeaderboardRow key={row.rank} row={toScoutRow(row)} />
+              ))}
+          {active.data.you && active.data.rows.every((r) => !r.is_you) && (
+            <>
+              <div className="my-1 border-t border-dashed border-border" />
+              {tab === "portfolio" ? (
+                <LeaderboardRow row={toPortfolioRow(active.data.you as PortfolioLeaderboardRow)} />
+              ) : (
+                <LeaderboardRow row={toScoutRow(active.data.you as ScoutLeaderboardRow)} />
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

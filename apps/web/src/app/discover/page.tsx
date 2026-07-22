@@ -9,13 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatCents, formatPct } from "@/lib/format";
-import { mockDailyChangePct } from "@/lib/mock-discovery";
 import { type ArtistOut, useArtists } from "@/lib/queries";
 
 const PAGE_SIZE = 8;
 
+/** `daily_change_pct` is null only if `price_history` somehow has zero
+ * rows for a listed artist, which never happens in practice (CLAUDE.md:
+ * a listed artist always has at least one row, written at listing) --
+ * falls back to 0 (flat) rather than hiding the artist from every feed
+ * that sorts by movement. */
 function withChange(artists: ArtistOut[]) {
-  return artists.map((a) => ({ ...a, changePct: mockDailyChangePct(a.slug) }));
+  return artists.map((a) => ({ ...a, changePct: a.daily_change_pct ?? 0 }));
 }
 
 function updatedLabel(dataUpdatedAt: number): string {

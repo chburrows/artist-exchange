@@ -3,10 +3,13 @@ public, read-only, the data behind Phase 5's listing page, artist page,
 and signature dual-line chart.
 """
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
-from ax.db.models import TIER_BLUE_CHIP, TIER_GROWTH
+from ax.db.models import TIER_BLUE_CHIP, TIER_GROWTH, PriceHistory
 from tests.conftest import ArtistFactory, ListArtist
 
 
@@ -98,6 +101,51 @@ def test_history_includes_the_listing_row(
     assert len(body["points"]) == 1
     assert body["points"][0]["source"] == "listing"
     assert body["points"][0]["market_price_cents"] == 1_000
+
+
+def test_daily_change_falls_back_to_since_inception_for_a_fresh_listing(
+    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+) -> None:
+    artist = make_artist("Freshly Listed")
+    list_artist(artist, fair_value_cents=1_000)
+
+    body = client.get(f"/artists/{artist.slug}").json()
+
+    # No row older than the 24h window exists yet -- falls back to the
+    # listing row itself, so change-since-listing is 0%, not None.
+    assert body["daily_change_pct"] == 0.0
+
+
+def test_daily_change_diffs_against_a_real_older_price(
+    client: TestClient, session: OrmSession, make_artist: ArtistFactory, list_artist: ListArtist
+) -> None:
+    artist = make_artist("Established")
+    list_artist(artist, fair_value_cents=1_000)
+
+    # Backdate the listing row itself to well outside the 24h window, and
+    # give the artist a newer, higher-priced row inside the window -- the
+    # endpoint should diff against the old one, not the newest one.
+    listing_row = session.scalars(
+        select(PriceHistory).where(PriceHistory.artist_id == artist.id)
+    ).one()
+    listing_row.at = datetime.now(UTC) - timedelta(days=3)
+    listing_row.market_price_cents = 800
+    session.add(
+        PriceHistory(
+            artist_id=artist.id,
+            at=datetime.now(UTC) - timedelta(hours=1),
+            market_price_cents=1_000,
+            fair_value_cents=1_000,
+            net_supply=0,
+            source="reversion",
+        )
+    )
+    session.flush()
+
+    body = client.get(f"/artists/{artist.slug}").json()
+
+    # (1000 - 800) / 800 * 100 == 25.0
+    assert body["daily_change_pct"] == 25.0
 
 
 def test_history_reflects_a_trade(
