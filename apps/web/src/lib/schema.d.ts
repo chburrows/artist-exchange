@@ -14,16 +14,64 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Signup
-         * @description Claim a username, grant `STARTING_BALANCE_CENTS`, and log in --
-         *     one transaction, so a crash between "user created" and "grant
-         *     written" is structurally impossible rather than merely unlikely.
+         * Request Signup
+         * @description Request step of verify-before-create signup. Always 202 regardless
+         *     of which branch below fires -- same anti-enumeration shape
+         *     `/auth/magic-link` already uses, so a prober can't distinguish "this
+         *     address already has an account" from "a new signup was queued".
          */
-        post: operations["signup_auth_signup_post"];
+        post: operations["request_signup_auth_signup_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/auth/signup/consume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume Signup
+         * @description Creates `users` + the `GRANT` ledger row + a `Session`, all in one
+         *     transaction (the same shape Phase 4's one-shot signup used, just
+         *     moved behind email verification).
+         *
+         *     Username collision handling has one rule: a value nobody chose (this
+         *     request omitted `username` *and* the original request did too) is
+         *     the server's problem, retried in-process with a fresh generated
+         *     candidate; a value somebody chose -- typed at request time, or
+         *     supplied again here -- is a 409 for the caller to resolve, and
+         *     `consumed_at` is deliberately left unset so the token (proof of inbox
+         *     ownership) is still good for a retry against a different username.
+         */
+        post: operations["consume_signup_auth_signup_consume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/username": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Username */
+        patch: operations["update_username_auth_username_patch"];
         trace?: never;
     };
     "/auth/logout": {
@@ -66,28 +114,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/email": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Request Email Attach
-         * @description Attach (or change) the current user's email. Nothing is written to
-         *     `users.email` yet -- only consuming the resulting link proves mailbox
-         *     control and actually attaches it (see module docstring).
-         */
-        post: operations["request_email_attach_auth_email_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/magic-link": {
         parameters: {
             query?: never;
@@ -99,10 +125,10 @@ export interface paths {
         put?: never;
         /**
          * Request Magic Link
-         * @description Recovery on a new device: request a login link for an already-
-         *     attached email. Always returns the same response whether or not the
-         *     email is registered -- a differing response would let anyone probe
-         *     which addresses have accounts.
+         * @description Recovery on a new device: request a login link for an existing
+         *     account. Always returns the same response whether or not the email
+         *     is registered -- a differing response would let anyone probe which
+         *     addresses have accounts.
          */
         post: operations["request_magic_link_auth_magic_link_post"];
         delete?: never;
@@ -118,10 +144,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Consume Magic Link */
-        get: operations["consume_magic_link_auth_magic_link_consume_get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** Consume Magic Link */
+        post: operations["consume_magic_link_auth_magic_link_consume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -453,6 +479,11 @@ export interface components {
             /** Points */
             points: components["schemas"]["HistoryPoint"][];
         };
+        /** MagicLinkConsumeRequest */
+        MagicLinkConsumeRequest: {
+            /** Token */
+            token: string;
+        };
         /** PortfolioHistoryResponse */
         PortfolioHistoryResponse: {
             /** Points */
@@ -552,10 +583,19 @@ export interface components {
             /** Is You */
             is_you: boolean;
         };
+        /** SignupConsumeRequest */
+        SignupConsumeRequest: {
+            /** Token */
+            token: string;
+            /** Username */
+            username?: string | null;
+        };
         /** SignupRequest */
         SignupRequest: {
+            /** Email */
+            email: string;
             /** Username */
-            username: string;
+            username?: string | null;
         };
         /** SignupResponse */
         SignupResponse: {
@@ -603,7 +643,12 @@ export interface components {
             /** Username */
             username: string;
             /** Email */
-            email: string | null;
+            email: string;
+        };
+        /** UsernameUpdateRequest */
+        UsernameUpdateRequest: {
+            /** Username */
+            username: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -627,7 +672,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    signup_auth_signup_post: {
+    request_signup_auth_signup_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -641,12 +686,80 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consume_signup_auth_signup_consume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupConsumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["SignupResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_username_auth_username_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                ax_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsernameUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
                 };
             };
             /** @description Validation Error */
@@ -720,41 +833,6 @@ export interface operations {
             };
         };
     };
-    request_email_attach_auth_email_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                ax_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EmailRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     request_magic_link_auth_magic_link_post: {
         parameters: {
             query?: never;
@@ -788,16 +866,18 @@ export interface operations {
             };
         };
     };
-    consume_magic_link_auth_magic_link_consume_get: {
+    consume_magic_link_auth_magic_link_consume_post: {
         parameters: {
-            query: {
-                token: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicLinkConsumeRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

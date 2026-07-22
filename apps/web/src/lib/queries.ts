@@ -42,11 +42,24 @@ export function useMe() {
   });
 }
 
-export function useSignup() {
+/** Request step of Phase 7's verify-before-create signup -- queues a
+ * `pending_signups` row and emails a confirm link. No session yet: that
+ * only happens once the link is consumed (`useConsumeSignup`). */
+export function useRequestSignup() {
+  return useMutation({
+    mutationFn: async (body: { email: string; username?: string }) =>
+      unwrap(await api.POST("/auth/signup", { body })),
+  });
+}
+
+/** Consume step: creates the account, grants the starting balance, and
+ * opens the session, all at once. `username` is only sent when the
+ * caller is overriding a 409'd suggestion -- omitted on the first try. */
+export function useConsumeSignup() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (username: string) =>
-      unwrap(await api.POST("/auth/signup", { body: { username } })),
+    mutationFn: async (body: { token: string; username?: string }) =>
+      unwrap(await api.POST("/auth/signup/consume", { body })),
     onSuccess: (data) => {
       queryClient.setQueryData(["me"], data.user);
       queryClient.invalidateQueries({ queryKey: ["portfolio"] });
@@ -68,6 +81,17 @@ export function useLogout() {
   });
 }
 
+export function useUpdateUsername() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (username: string) =>
+      unwrap(await api.PATCH("/auth/username", { body: { username } })),
+    onSuccess: (user) => {
+      queryClient.setQueryData(["me"], user);
+    },
+  });
+}
+
 export function useRequestMagicLink() {
   return useMutation({
     mutationFn: async (email: string) =>
@@ -79,7 +103,7 @@ export function useConsumeMagicLink() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (token: string) =>
-      unwrap(await api.GET("/auth/magic-link/consume", { params: { query: { token } } })),
+      unwrap(await api.POST("/auth/magic-link/consume", { body: { token } })),
     onSuccess: (data) => {
       queryClient.setQueryData(["me"], data.user);
     },

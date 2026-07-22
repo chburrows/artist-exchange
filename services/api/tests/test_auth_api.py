@@ -1,26 +1,37 @@
-"""Signup, session cookie, and magic-link flows, end to end through the
-real app -- these are the auth guarantees that everything else (trades,
-portfolio) trusts blindly, so they're exercised at the HTTP layer rather
-than just unit-tested against the pure helpers.
+"""Required-email signup (request -> consume), session cookie, and
+magic-link recovery, end to end through the real app -- these are the
+auth guarantees that everything else (trades, portfolio) trusts blindly,
+so they're exercised at the HTTP layer rather than just unit-tested
+against the pure helpers.
 """
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ax.core.config import STARTING_BALANCE_CENTS
-from ax.db.models import BalanceCache, Transaction, User
-from tests.conftest import FakeEmailProvider
+from ax.db.models import BalanceCache, PendingSignup, Transaction, User
+from tests.conftest import FakeEmailProvider, complete_signup
 
 
-def test_signup_grants_exactly_once(client: TestClient, session: Session) -> None:
-    response = client.post("/auth/signup", json={"username": "scout99"})
+def test_signup_request_consume_grants_exactly_once(
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
+) -> None:
+    request = client.post(
+        "/auth/signup", json={"email": "scout99@example.com", "username": "scout99"}
+    )
+    assert request.status_code == 202
+    # Anti-enumeration: the request step never reveals account state.
+    assert request.json() == {"detail": "check your email to continue"}
 
-    assert response.status_code == 201
-    body = response.json()
+    consume = client.post("/auth/signup/consume", json={"token": email_provider.last_token()})
+    assert consume.status_code == 201
+    body = consume.json()
     assert body["cash_cents"] == STARTING_BALANCE_CENTS
     assert body["user"]["username"] == "scout99"
-    assert "ax_session" in response.cookies
+    assert body["user"]["email"] == "scout99@example.com"
+    assert "ax_session" in consume.cookies
 
     user = session.scalars(select(User).where(User.username == "scout99")).one()
     grants = session.scalars(
@@ -34,25 +45,129 @@ def test_signup_grants_exactly_once(client: TestClient, session: Session) -> Non
     assert balance.cash_cents == STARTING_BALANCE_CENTS
 
 
-def test_signup_rejects_duplicate_username(client: TestClient) -> None:
-    first = client.post("/auth/signup", json={"username": "onlyone"})
-    assert first.status_code == 201
-
-    second = client.post("/auth/signup", json={"username": "onlyone"})
-    assert second.status_code == 409
+def test_signup_rejects_invalid_email(client: TestClient) -> None:
+    response = client.post("/auth/signup", json={"email": "not-an-email", "username": "a-ok"})
+    assert response.status_code == 422
 
 
 def test_signup_rejects_invalid_username(client: TestClient) -> None:
-    response = client.post("/auth/signup", json={"username": "a"})
+    response = client.post("/auth/signup", json={"email": "a@example.com", "username": "a"})
     assert response.status_code == 422
+
+
+def test_signup_without_a_username_generates_one(
+    client: TestClient, email_provider: FakeEmailProvider
+) -> None:
+    request = client.post("/auth/signup", json={"email": "noname@example.com"})
+    assert request.status_code == 202
+
+    consume = client.post("/auth/signup/consume", json={"token": email_provider.last_token()})
+    assert consume.status_code == 201
+    username = consume.json()["user"]["username"]
+    assert 3 <= len(username) <= 24
+
+
+def test_consume_with_a_taken_username_409s_without_consuming_the_token(
+    client: TestClient, email_provider: FakeEmailProvider
+) -> None:
+    complete_signup(client, email_provider, "onlyone", email="onlyone@example.com")
+
+    request = client.post(
+        "/auth/signup", json={"email": "second@example.com", "username": "second-hopeful"}
+    )
+    assert request.status_code == 202
+    token = email_provider.last_token()
+
+    collide = client.post("/auth/signup/consume", json={"token": token, "username": "onlyone"})
+    assert collide.status_code == 409
+
+    # The token is still good -- a username collision isn't proof the
+    # caller doesn't own the inbox, so it must not be burned.
+    retry = client.post(
+        "/auth/signup/consume", json={"token": token, "username": "second-claimant"}
+    )
+    assert retry.status_code == 201
+    assert retry.json()["user"]["username"] == "second-claimant"
+
+
+def test_consume_rejects_an_unknown_token(client: TestClient) -> None:
+    response = client.post("/auth/signup/consume", json={"token": "not-a-real-token"})
+    assert response.status_code == 400
+
+
+def test_consume_is_single_use(client: TestClient, email_provider: FakeEmailProvider) -> None:
+    client.post("/auth/signup", json={"email": "singleuse@example.com", "username": "singleuse"})
+    token = email_provider.last_token()
+
+    first = client.post("/auth/signup/consume", json={"token": token})
+    assert first.status_code == 201
+
+    second = client.post("/auth/signup/consume", json={"token": token})
+    assert second.status_code == 400
+
+
+def test_signup_for_an_email_that_already_has_a_verified_account_sends_a_login_link(
+    client: TestClient, email_provider: FakeEmailProvider, session: Session
+) -> None:
+    complete_signup(client, email_provider, "existing", email="existing@example.com")
+    users_before = session.scalars(select(User)).all()
+
+    request = client.post(
+        "/auth/signup", json={"email": "existing@example.com", "username": "existing-again"}
+    )
+    assert request.status_code == 202
+    assert request.json() == {"detail": "check your email to continue"}
+
+    users_after = session.scalars(select(User)).all()
+    assert len(users_after) == len(users_before)
+
+    # The link sent is a login link, not a signup-consume link.
+    consume = client.post("/auth/magic-link/consume", json={"token": email_provider.last_token()})
+    assert consume.status_code == 200
+    assert consume.json()["user"]["username"] == "existing"
+
+
+def test_a_second_signup_request_for_the_same_email_invalidates_the_first_token(
+    client: TestClient, email_provider: FakeEmailProvider, session: Session
+) -> None:
+    first = client.post(
+        "/auth/signup", json={"email": "flip-flop@example.com", "username": "first-try"}
+    )
+    assert first.status_code == 202
+    first_token = email_provider.last_token()
+
+    second = client.post(
+        "/auth/signup", json={"email": "flip-flop@example.com", "username": "second-try"}
+    )
+    assert second.status_code == 202
+
+    live = session.scalars(
+        select(PendingSignup).where(PendingSignup.email == "flip-flop@example.com")
+    ).all()
+    assert len(live) == 1
+
+    consume_stale = client.post("/auth/signup/consume", json={"token": first_token})
+    assert consume_stale.status_code == 400
+
+
+def test_users_email_not_null_is_a_db_backstop(session: Session) -> None:
+    session.add(User(username="no-email-allowed", email=None))  # type: ignore[arg-type]
+    try:
+        session.flush()
+        raised = False
+    except IntegrityError:
+        raised = True
+    finally:
+        session.rollback()
+    assert raised
 
 
 def test_me_requires_a_session(client: TestClient) -> None:
     assert client.get("/auth/me").status_code == 401
 
 
-def test_signup_then_me_round_trips(client: TestClient) -> None:
-    client.post("/auth/signup", json={"username": "roundtrip"})
+def test_signup_then_me_round_trips(client: TestClient, email_provider: FakeEmailProvider) -> None:
+    complete_signup(client, email_provider, "roundtrip", email="roundtrip@example.com")
 
     response = client.get("/auth/me")
 
@@ -60,8 +175,8 @@ def test_signup_then_me_round_trips(client: TestClient) -> None:
     assert response.json()["username"] == "roundtrip"
 
 
-def test_logout_clears_the_session(client: TestClient) -> None:
-    client.post("/auth/signup", json={"username": "loggingout"})
+def test_logout_clears_the_session(client: TestClient, email_provider: FakeEmailProvider) -> None:
+    complete_signup(client, email_provider, "loggingout", email="loggingout@example.com")
     assert client.get("/auth/me").status_code == 200
 
     logout = client.post("/auth/logout")
@@ -74,72 +189,44 @@ def test_logout_without_a_session_is_a_no_op(client: TestClient) -> None:
     assert client.post("/auth/logout").status_code == 204
 
 
-def test_email_attach_requires_auth(client: TestClient) -> None:
-    response = client.post("/auth/email", json={"email": "scout@example.com"})
+def test_update_username_requires_auth(client: TestClient) -> None:
+    response = client.patch("/auth/username", json={"username": "newname"})
     assert response.status_code == 401
 
 
-def test_email_attach_and_consume_confirms_the_address(
-    client: TestClient, email_provider: FakeEmailProvider, session: Session
-) -> None:
-    client.post("/auth/signup", json={"username": "attacher"})
-
-    attach = client.post("/auth/email", json={"email": "attacher@example.com"})
-    assert attach.status_code == 202
-    assert len(email_provider.sent) == 1
-    assert email_provider.sent[0].to == "attacher@example.com"
-
-    me_before = client.get("/auth/me").json()
-    assert me_before["email"] is None
-
-    token = email_provider.last_token()
-    consume = client.get(f"/auth/magic-link/consume?token={token}")
-    assert consume.status_code == 200
-    assert consume.json()["user"]["email"] == "attacher@example.com"
-
-    user = session.scalars(select(User).where(User.username == "attacher")).one()
-    assert user.email == "attacher@example.com"
-
-
-def test_consume_rejects_an_unknown_token(client: TestClient) -> None:
-    response = client.get("/auth/magic-link/consume?token=not-a-real-token")
-    assert response.status_code == 400
-
-
-def test_consume_is_single_use(client: TestClient, email_provider: FakeEmailProvider) -> None:
-    client.post("/auth/signup", json={"username": "singleuse"})
-    client.post("/auth/email", json={"email": "singleuse@example.com"})
-    token = email_provider.last_token()
-
-    first = client.get(f"/auth/magic-link/consume?token={token}")
-    assert first.status_code == 200
-
-    second = client.get(f"/auth/magic-link/consume?token={token}")
-    assert second.status_code == 400
-
-
-def test_email_attach_rejects_address_already_on_another_account(
+def test_update_username_changes_it_and_frees_the_old_one(
     client: TestClient, email_provider: FakeEmailProvider
 ) -> None:
-    client.post("/auth/signup", json={"username": "first-owner"})
-    client.post("/auth/email", json={"email": "shared@example.com"})
-    token = email_provider.last_token()
-    client.get(f"/auth/magic-link/consume?token={token}")
+    complete_signup(client, email_provider, "oldname", email="rename@example.com")
+
+    response = client.patch("/auth/username", json={"username": "newname"})
+    assert response.status_code == 200
+    assert response.json()["username"] == "newname"
+    assert client.get("/auth/me").json()["username"] == "newname"
+
     client.post("/auth/logout")
+    # The old username is claimable again.
+    reclaim = client.post(
+        "/auth/signup", json={"email": "reclaimer@example.com", "username": "oldname"}
+    )
+    assert reclaim.status_code == 202
 
-    client.post("/auth/signup", json={"username": "second-claimant"})
-    response = client.post("/auth/email", json={"email": "shared@example.com"})
 
+def test_update_username_rejects_a_collision(
+    client: TestClient, email_provider: FakeEmailProvider
+) -> None:
+    complete_signup(client, email_provider, "taken", email="taken@example.com")
+    client.post("/auth/logout")
+    complete_signup(client, email_provider, "renamer", email="renamer@example.com")
+
+    response = client.patch("/auth/username", json={"username": "taken"})
     assert response.status_code == 409
 
 
 def test_magic_link_recovery_logs_into_the_right_account(
     client: TestClient, email_provider: FakeEmailProvider
 ) -> None:
-    client.post("/auth/signup", json={"username": "recoverme"})
-    client.post("/auth/email", json={"email": "recoverme@example.com"})
-    token = email_provider.last_token()
-    client.get(f"/auth/magic-link/consume?token={token}")
+    complete_signup(client, email_provider, "recoverme", email="recoverme@example.com")
     client.post("/auth/logout")
     assert client.get("/auth/me").status_code == 401
 
@@ -147,7 +234,7 @@ def test_magic_link_recovery_logs_into_the_right_account(
     assert recovery.status_code == 202
 
     recovery_token = email_provider.last_token()
-    consume = client.get(f"/auth/magic-link/consume?token={recovery_token}")
+    consume = client.post("/auth/magic-link/consume", json={"token": recovery_token})
     assert consume.status_code == 200
     assert consume.json()["user"]["username"] == "recoverme"
 
@@ -163,12 +250,18 @@ def test_magic_link_recovery_for_unregistered_email_is_silent(
     assert email_provider.sent == []
 
 
+def test_magic_link_consume_rejects_an_unknown_token(client: TestClient) -> None:
+    response = client.post("/auth/magic-link/consume", json={"token": "not-a-real-token"})
+    assert response.status_code == 400
+
+
 def test_email_send_failure_surfaces_as_502(
     client: TestClient, email_provider: FakeEmailProvider
 ) -> None:
-    client.post("/auth/signup", json={"username": "unlucky"})
     email_provider.fail = True
 
-    response = client.post("/auth/email", json={"email": "unlucky@example.com"})
+    response = client.post(
+        "/auth/signup", json={"email": "unlucky@example.com", "username": "unlucky"}
+    )
 
     assert response.status_code == 502

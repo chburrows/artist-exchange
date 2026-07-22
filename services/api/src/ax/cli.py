@@ -442,7 +442,11 @@ def _simulate_trades(users: int, days: int, seed: int) -> None:
         by_username: dict[str, User] = {
             u.username: u for u in session.scalars(select(User).where(User.username.in_(usernames)))
         }
-        new_users = [User(username=name) for name in usernames if name not in by_username]
+        new_users = [
+            User(username=name, email=f"{name}@sim.local")
+            for name in usernames
+            if name not in by_username
+        ]
         if new_users:
             session.add_all(new_users)
             session.flush()

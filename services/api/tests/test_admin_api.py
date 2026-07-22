@@ -13,15 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ax.db.models import FlaggedArtist, User
-from tests.conftest import ArtistFactory
+from tests.conftest import ArtistFactory, FakeEmailProvider, complete_signup
 
 FLAG_DATE = date(2026, 1, 1)
 
 
-def _signup(client: TestClient, username: str) -> dict:
-    response = client.post("/auth/signup", json={"username": username})
-    assert response.status_code == 201
-    return response.json()
+def _signup(client: TestClient, email_provider: FakeEmailProvider, username: str) -> dict:
+    return complete_signup(client, email_provider, username)
 
 
 def _make_admin(session: Session, username: str) -> None:
@@ -35,16 +33,18 @@ def test_flagged_artists_requires_auth(client: TestClient) -> None:
     assert client.get("/admin/flagged-artists").status_code == 401
 
 
-def test_flagged_artists_requires_admin(client: TestClient) -> None:
-    _signup(client, "regular-joe")
+def test_flagged_artists_requires_admin(
+    client: TestClient, email_provider: FakeEmailProvider
+) -> None:
+    _signup(client, email_provider, "regular-joe")
 
     response = client.get("/admin/flagged-artists")
 
     assert response.status_code == 403
 
 
-def test_clear_requires_admin(client: TestClient) -> None:
-    _signup(client, "regular-jane")
+def test_clear_requires_admin(client: TestClient, email_provider: FakeEmailProvider) -> None:
+    _signup(client, email_provider, "regular-jane")
 
     response = client.post("/admin/flagged-artists/1/2026-01-01/clear")
 
@@ -52,9 +52,12 @@ def test_clear_requires_admin(client: TestClient) -> None:
 
 
 def test_admin_lists_open_flags_only_by_default(
-    client: TestClient, session: Session, make_artist: ArtistFactory
+    client: TestClient,
+    session: Session,
+    make_artist: ArtistFactory,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    _signup(client, "reviewer")
+    _signup(client, email_provider, "reviewer")
     _make_admin(session, "reviewer")
 
     open_artist = make_artist("Open Flag")
@@ -94,9 +97,12 @@ def test_admin_lists_open_flags_only_by_default(
 
 
 def test_admin_clears_a_flag(
-    client: TestClient, session: Session, make_artist: ArtistFactory
+    client: TestClient,
+    session: Session,
+    make_artist: ArtistFactory,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    _signup(client, "reviewer2")
+    _signup(client, email_provider, "reviewer2")
     _make_admin(session, "reviewer2")
 
     artist = make_artist("To Clear")
@@ -119,8 +125,10 @@ def test_admin_clears_a_flag(
     assert client.get("/admin/flagged-artists").json() == []
 
 
-def test_clearing_a_nonexistent_flag_404s(client: TestClient, session: Session) -> None:
-    _signup(client, "reviewer3")
+def test_clearing_a_nonexistent_flag_404s(
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
+) -> None:
+    _signup(client, email_provider, "reviewer3")
     _make_admin(session, "reviewer3")
 
     response = client.post(f"/admin/flagged-artists/999999/{FLAG_DATE.isoformat()}/clear")

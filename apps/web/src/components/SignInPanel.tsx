@@ -15,10 +15,10 @@ import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/errors";
 import { useRequestMagicLink } from "@/lib/queries";
 
-/** "I already have an account" -- claim-username signup has no password,
- * so returning on a new session means either the still-live session
- * cookie (the common case) or a magic link to an email you'd previously
- * attached (auth.py: `POST /auth/email`). This dialog only covers
+/** "I already have an account" -- signup has no password, so returning
+ * on a new session means either the still-live session cookie (the
+ * common case) or a magic link to the email verified at signup
+ * (`auth.py`: `POST /auth/magic-link`). This dialog only covers
  * requesting that link; consuming it happens on `/auth/verify`. */
 export function SignInPanel({
   open,

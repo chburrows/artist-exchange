@@ -5,15 +5,17 @@ path `position_cache`/`balance_cache` exist to make cheap.
 from fastapi.testclient import TestClient
 
 from ax.core.config import STARTING_BALANCE_CENTS
-from tests.conftest import ArtistFactory, ListArtist
+from tests.conftest import ArtistFactory, FakeEmailProvider, ListArtist, complete_signup
 
 
 def test_portfolio_requires_auth(client: TestClient) -> None:
     assert client.get("/portfolio").status_code == 401
 
 
-def test_fresh_signup_has_starting_balance_and_no_positions(client: TestClient) -> None:
-    client.post("/auth/signup", json={"username": "freshling"})
+def test_fresh_signup_has_starting_balance_and_no_positions(
+    client: TestClient, email_provider: FakeEmailProvider
+) -> None:
+    complete_signup(client, email_provider, "freshling")
 
     response = client.get("/portfolio")
 
@@ -25,9 +27,12 @@ def test_fresh_signup_has_starting_balance_and_no_positions(client: TestClient) 
 
 
 def test_portfolio_reflects_a_buy(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    client.post("/auth/signup", json={"username": "holder"})
+    complete_signup(client, email_provider, "holder")
     artist = make_artist("Held")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -53,9 +58,12 @@ def test_portfolio_reflects_a_buy(
 
 
 def test_selling_to_zero_drops_the_position_from_the_list(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    client.post("/auth/signup", json={"username": "flipper"})
+    complete_signup(client, email_provider, "flipper")
     artist = make_artist("Flipped")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -68,16 +76,19 @@ def test_selling_to_zero_drops_the_position_from_the_list(
 
 
 def test_portfolios_are_isolated_per_user(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     artist = make_artist("Shared Market")
     list_artist(artist, fair_value_cents=1_000)
 
-    client.post("/auth/signup", json={"username": "trader-a"})
+    complete_signup(client, email_provider, "trader-a")
     client.post("/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 5})
     client.post("/auth/logout")
 
-    client.post("/auth/signup", json={"username": "trader-b"})
+    complete_signup(client, email_provider, "trader-b")
     response = client.get("/portfolio")
 
     assert response.json()["cash_cents"] == STARTING_BALANCE_CENTS

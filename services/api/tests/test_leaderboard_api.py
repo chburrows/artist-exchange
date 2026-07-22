@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from ax.jobs.leaderboard import run_leaderboard_snapshot
-from tests.conftest import ArtistFactory, ListArtist
+from tests.conftest import ArtistFactory, FakeEmailProvider, ListArtist, complete_signup
 
 
 def test_portfolio_leaderboard_is_public(client: TestClient) -> None:
@@ -25,11 +25,11 @@ def test_portfolio_leaderboard_empty_before_any_snapshot_has_run(client: TestCli
 
 
 def test_portfolio_leaderboard_ranks_by_equity_and_flags_you(
-    client: TestClient, session: Session
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
 ) -> None:
-    client.post("/auth/signup", json={"username": "trader-a"})
+    complete_signup(client, email_provider, "trader-a")
     client.post("/auth/logout")
-    client.post("/auth/signup", json={"username": "trader-b"})
+    complete_signup(client, email_provider, "trader-b")
     # trader-b is the current session below.
 
     run_leaderboard_snapshot(session, date(2026, 1, 1), now=datetime.now(UTC))
@@ -49,9 +49,13 @@ def test_portfolio_leaderboard_ranks_by_equity_and_flags_you(
 
 
 def test_scout_leaderboard_includes_artist_and_entry_price(
-    client: TestClient, session: Session, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    session: Session,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    client.post("/auth/signup", json={"username": "scout"})
+    complete_signup(client, email_provider, "scout")
     artist = make_artist("Undervalued")
     list_artist(artist, fair_value_cents=200, index_score=30.0)
     client.post("/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 10})
@@ -82,17 +86,19 @@ def test_portfolio_history_requires_auth(client: TestClient) -> None:
     assert client.get("/portfolio/history").status_code == 401
 
 
-def test_portfolio_history_empty_before_any_snapshot_has_run(client: TestClient) -> None:
-    client.post("/auth/signup", json={"username": "no-history-yet"})
+def test_portfolio_history_empty_before_any_snapshot_has_run(
+    client: TestClient, email_provider: FakeEmailProvider
+) -> None:
+    complete_signup(client, email_provider, "no-history-yet")
     response = client.get("/portfolio/history")
     assert response.status_code == 200
     assert response.json()["points"] == []
 
 
 def test_portfolio_history_returns_real_snapshots_oldest_first(
-    client: TestClient, session: Session
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
 ) -> None:
-    client.post("/auth/signup", json={"username": "historied"})
+    complete_signup(client, email_provider, "historied")
 
     run_leaderboard_snapshot(session, date(2026, 1, 1), now=datetime.now(UTC))
     run_leaderboard_snapshot(session, date(2026, 1, 2), now=datetime.now(UTC))

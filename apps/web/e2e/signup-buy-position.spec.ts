@@ -1,13 +1,21 @@
 import { expect, test } from "@playwright/test";
 
 import { API_BASE_URL } from "./config";
+import { lastLinkFor } from "./email";
 
 test("claim a username, buy a share, and see the position in your portfolio", async ({ page }) => {
   const username = `e2e_${Date.now()}`;
+  const email = `${username}@example.com`;
 
   await page.goto("/");
+  await page.getByLabel("Email").fill(email);
   await page.getByLabel("Username").fill(username);
   await page.getByRole("button", { name: /get started/i }).click();
+  await expect(page.getByText(/check your inbox/i)).toBeVisible();
+
+  // Phase 7: signup only creates the account once the emailed
+  // confirmation link is followed.
+  await page.goto(lastLinkFor(email));
   await expect(page.getByText(`Welcome back, ${username}`)).toBeVisible();
 
   // A real listed artist from `ax reset`'s seeded universe -- not

@@ -54,7 +54,7 @@ def real_session(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[Or
 
 def test_promote_admin_grants_flag(real_session: OrmSession) -> None:
     username = f"promotee-{uuid4().hex[:8]}"
-    user = User(username=username)
+    user = User(username=username, email=f"{username}@example.com")
     real_session.add(user)
     real_session.commit()
 

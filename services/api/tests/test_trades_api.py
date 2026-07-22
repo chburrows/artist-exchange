@@ -30,13 +30,11 @@ from ax.db.models import (
     Transaction,
     User,
 )
-from tests.conftest import ArtistFactory, ListArtist
+from tests.conftest import ArtistFactory, FakeEmailProvider, ListArtist, complete_signup
 
 
-def _signup(client: TestClient, username: str) -> dict:
-    response = client.post("/auth/signup", json={"username": username})
-    assert response.status_code == 201
-    return response.json()
+def _signup(client: TestClient, email_provider: FakeEmailProvider, username: str) -> dict:
+    return complete_signup(client, email_provider, username)
 
 
 def test_quote_requires_auth(client: TestClient) -> None:
@@ -46,16 +44,18 @@ def test_quote_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_quote_unknown_artist_is_404(client: TestClient) -> None:
-    _signup(client, "quoter")
+def test_quote_unknown_artist_is_404(client: TestClient, email_provider: FakeEmailProvider) -> None:
+    _signup(client, email_provider, "quoter")
     response = client.post(
         "/trades/quote", json={"artist_slug": "does-not-exist", "side": "buy", "shares": 1}
     )
     assert response.status_code == 404
 
 
-def test_quote_unlisted_artist_is_409(client: TestClient, make_artist: ArtistFactory) -> None:
-    _signup(client, "quoter2")
+def test_quote_unlisted_artist_is_409(
+    client: TestClient, make_artist: ArtistFactory, email_provider: FakeEmailProvider
+) -> None:
+    _signup(client, email_provider, "quoter2")
     artist = make_artist("Warming Up")
     response = client.post(
         "/trades/quote", json={"artist_slug": artist.slug, "side": "buy", "shares": 1}
@@ -64,9 +64,12 @@ def test_quote_unlisted_artist_is_409(client: TestClient, make_artist: ArtistFac
 
 
 def test_quote_buy_matches_core_amm(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    _signup(client, "quoter3")
+    _signup(client, email_provider, "quoter3")
     artist = make_artist("Quotable")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -90,8 +93,9 @@ def test_execute_buy_updates_balance_and_position(
     session: OrmSession,
     make_artist: ArtistFactory,
     list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    user = _signup(client, "buyer")
+    user = _signup(client, email_provider, "buyer")
     artist = make_artist("Buyable")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -127,9 +131,12 @@ def test_execute_buy_updates_balance_and_position(
 
 
 def test_execute_buy_insufficient_funds_is_422(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    _signup(client, "pauper")
+    _signup(client, email_provider, "pauper")
     artist = make_artist("Expensive")
     # One share alone costs far more than STARTING_BALANCE_CENTS.
     list_artist(artist, fair_value_cents=2_000_000)
@@ -141,11 +148,14 @@ def test_execute_buy_insufficient_funds_is_422(
 
 
 def test_execute_sell_with_zero_net_supply_is_422(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     """No shares exist yet (net_supply == 0), so the AMM curve itself
     rejects the sell before the position-ownership check ever runs."""
-    _signup(client, "no-position")
+    _signup(client, email_provider, "no-position")
     artist = make_artist("Unowned")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -158,18 +168,21 @@ def test_execute_sell_with_zero_net_supply_is_422(
 
 
 def test_execute_sell_more_than_owned_is_422(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     """Supply exists (someone else bought in), but *this* user holds
     none of it -- the oversell violation from `validate_sell`."""
     artist = make_artist("Partly Owned")
     list_artist(artist, fair_value_cents=1_000)
 
-    _signup(client, "owner")
+    _signup(client, email_provider, "owner")
     client.post("/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 5})
     client.post("/auth/logout")
 
-    _signup(client, "bystander")
+    _signup(client, email_provider, "bystander")
     response = client.post(
         "/trades", json={"artist_slug": artist.slug, "side": "sell", "shares": 1}
     )
@@ -179,11 +192,14 @@ def test_execute_sell_more_than_owned_is_422(
 
 
 def test_buy_then_sell_round_trip_loses_money(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     """PLAN.md's Phase 4 'done when': signup -> quote -> buy -> portfolio
     -> sell -> portfolio shows the expected fee-driven round-trip loss."""
-    user = _signup(client, "roundtripper")
+    user = _signup(client, email_provider, "roundtripper")
     artist = make_artist("Round Tripper")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -209,9 +225,12 @@ def test_buy_then_sell_round_trip_loses_money(
 
 
 def test_idempotency_key_prevents_double_charge(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    _signup(client, "retrier")
+    _signup(client, email_provider, "retrier")
     artist = make_artist("Retryable")
     list_artist(artist, fair_value_cents=1_000)
     key = str(uuid4())
@@ -233,7 +252,10 @@ def test_idempotency_key_prevents_double_charge(
 
 
 def test_idempotent_replay_finds_its_own_fee_row_not_a_later_trades(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     """Regression test: `_replay_response` used to pair a trade with its
     FEE row by matching `(artist_id, created_at)` exactly. The shared
@@ -244,7 +266,7 @@ def test_idempotent_replay_finds_its_own_fee_row_not_a_later_trades(
     with the first, which used to make the old lookup match two FEE rows
     and raise `MultipleResultsFound` on replay instead of returning the
     first trade's own fee."""
-    _signup(client, "multi-trader")
+    _signup(client, email_provider, "multi-trader")
     artist = make_artist("Repeatedly Traded")
     list_artist(artist, fair_value_cents=1_000)
     key = str(uuid4())
@@ -273,20 +295,23 @@ def test_idempotent_replay_finds_its_own_fee_row_not_a_later_trades(
 
 
 def test_idempotency_key_is_scoped_to_the_original_user(
-    client: TestClient, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     artist = make_artist("Contested")
     list_artist(artist, fair_value_cents=1_000)
     key = str(uuid4())
 
-    _signup(client, "owner")
+    _signup(client, email_provider, "owner")
     client.post(
         "/trades",
         json={"artist_slug": artist.slug, "side": "buy", "shares": 1, "idempotency_key": key},
     )
     client.post("/auth/logout")
 
-    _signup(client, "interloper")
+    _signup(client, email_provider, "interloper")
     response = client.post(
         "/trades",
         json={"artist_slug": artist.slug, "side": "buy", "shares": 1, "idempotency_key": key},
@@ -308,7 +333,7 @@ def test_concurrent_buys_on_one_artist_serialize(engine: Engine) -> None:
     setup = SessionLocal()
 
     suffix = uuid4().hex[:8]
-    user = User(username=f"racer-{suffix}")
+    user = User(username=f"racer-{suffix}", email=f"racer-{suffix}@example.com")
     setup.add(user)
     setup.flush()
     setup.add(BalanceCache(user_id=user.id, cash_cents=STARTING_BALANCE_CENTS))

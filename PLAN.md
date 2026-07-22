@@ -34,6 +34,7 @@ Environment/prerequisite setup lives in `SETUP.md`, kept current rather than dup
 - [x] **Phase 4** — Auth, trading, portfolio API — *claim-a-username + session cookie + magic-link recovery (Resend), `POST /trades/quote`+`POST /trades` under a fixed `balance_cache`-then-artist `FOR UPDATE` lock order, `GET /artists`/`{slug}`/`{slug}/history`, `GET /portfolio`, `jobs/reconcile.py` rebuilding both caches from the ledger nightly; `jobs/recompute.py` retrofitted with the same artist-row lock. 212 tests green, 99.68% coverage on `ax.core`; local smoke test against the real dev DB confirmed a ~2% fee-driven round-trip loss (see "As built" below)*
 - [x] **Phase 5** — The SPA — *Next.js static export, TanStack Query, generated client; artist list/detail with the signature dual-line chart, trade ticket, portfolio, plus an admin quarantine review-queue UI pulled forward from Phase 3's own follow-up note. This phase's literal "Done when" (a friend trades unattended) has no recorded human test; Phase 6's Playwright suite now exercises the same signup → trade → see-it-in-your-portfolio path automatically on every run instead (see "As built" below)*
 - [x] **Phase 6** — Leaderboards, discovery, polish — *`jobs/leaderboard.py` (nightly `equity_snapshots` + full-rebuild `leaderboard_scout`) + `/internal/jobs/leaderboard` + `ax leaderboard`; `GET /leaderboard/{portfolio,scout}` and `GET /portfolio/history`; every Phase 5 mock placeholder replaced with the real field or endpoint it named; canvas-drawn shareable portfolio card; 4 Playwright specs green against a real API + Postgres. 244 tests green, 99.68% coverage on `ax.core` (see "As built" below)*
+- [x] **Phase 7** — Required email, optional username *(post-v1)* — email mandatory at signup via a new `pending_signups` verify-before-create flow, auto-generated editable username, `PATCH /auth/username`, `POST /auth/email` removed, both consume endpoints converted `GET`→`POST`; 251 tests green, 99.68% coverage on `ax.core`; 5 Playwright specs green against a real API + Postgres. **Not yet deployed** — the Railway prod-user TRUNCATE this migration requires as a precondition needs explicit go-ahead and hasn't been run (see "As built" below)
 
 ---
 
@@ -458,6 +459,84 @@ Notes worth carrying forward:
 - **Not yet deployed to Railway.** No new variables needed (`EMAIL_PROVIDER` defaults `"resend"`; production refuses `"console"` outright) — just the deploy itself and confirming the new fourth nightly step fires unattended.
 - **Unresolved discrepancy, not silently dropped:** Phase 2's `components` section still says "Phase 6's audit trail reads it too," anticipating a UI over `index_snapshots.components` that this phase's own scope never named and that wasn't built. Build it later or strike the reference.
 - **Test coverage:** 244 tests green (18 new), 99.68% coverage on `ax.core`. All 4 Playwright specs green against a real API + Postgres, run three times to check for flakiness.
+
+---
+
+## Phase 7 — Required email, optional username *(post-v1)*
+
+Not part of the original six phases — v1 shipped username-only signup with email as an optional, post-hoc attach. This phase makes email mandatory at signup and closes the "no attach-email UI" gap Phase 6 flagged, by making attaching *unnecessary*: email is collected up front and the existing magic-link machinery (Resend, `ConsoleEmailProvider`, `core/auth.py` token hashing) verifies it before an account exists at all. **Still no passwords** — this extends the locked decision, it doesn't reverse it.
+
+The one real design fork: does the `users` row get created on form submit (unverified) or only once the emailed link is clicked (verified)? Creating eagerly means unverified accounts can pile up and lets someone spam signups to squat usernames or trigger `STARTING_BALANCE_CENTS` grants without ever proving they own the inbox. So: **nothing is created until the link is clicked.** A new `pending_signups` row holds the request; consuming it is what creates the user, grants the balance, and opens the session — mirroring today's one-transaction signup, just moved to sit behind email verification.
+
+### Schema
+
+```sql
+-- new
+pending_signups(id, email citext, requested_username, token_hash bytea unique,
+                expires_at, consumed_at null, created_at)
+
+-- changed: email is no longer optional
+users(id, username citext unique, email citext not null unique, created_at)
+```
+
+`sessions` and `magic_links` are unchanged — `magic_links` keeps doing exactly what it does today: login/recovery for accounts that already exist. `pending_signups` is deliberately a separate table, not a repurposed `magic_links` row: `magic_links.user_id` is bound at creation specifically so a link can only ever be "log in as this already-known user" (see Phase 4's "As built," the anti-hijack reasoning behind that column). A signup token has no `user_id` yet by definition, so it can't reuse that invariant without weakening it.
+
+New config constant, `core/config.py`: `PENDING_SIGNUP_TTL_MINUTES` (default 15, same window as `MAGIC_LINK_TTL_MINUTES`) — kept as its own named constant per CLAUDE.md rule 4 even though it starts equal to the existing one, since signup and recovery windows are conceptually independent and may want to diverge later.
+
+### Endpoints (`api/routers/auth.py`)
+
+- **`POST /auth/signup`** — repurposed as the *request* step. Body `{email, username?}`. If `username` is blank/omitted, the server generates one (same word-pair+suffix approach as the frontend, so the API contract doesn't depend on a JS client always supplying a value). Validates the existing `^[A-Za-z0-9_-]{3,24}$` regex if a username was given. If the email already belongs to a verified user, sends a **login** magic link instead of creating a duplicate pending signup. Always returns 202 regardless of which branch fired — same anti-enumeration shape `/auth/magic-link` already uses. Invalidates any other outstanding `pending_signups` for that email before inserting the new one, so at most one is ever live per address.
+- **`POST /auth/signup/consume`** — body `{token, username?}`. Looks up the unconsumed, unexpired `pending_signups` row by hashed token; on success, creates `users` + the `GRANT` ledger row + a `Session`, all in one transaction (same shape as today's signup), sets `consumed_at`, sets the session cookie. On a username collision:
+  - **Generated default collides** — retry in-process with a freshly generated suffix, a few bounded attempts, invisible to the caller.
+  - **Caller-supplied username collides** (their own typed choice, or a retry supplying a new one) — return `409` and **do not set `consumed_at`**. The token already proved inbox ownership; a username clash isn't a reason to burn it. The client resubmits the same `token` with a different `username` against the still-open pending signup.
+- **`PATCH /auth/username`** — new, authenticated (`CurrentUserDep`). Body `{username}`, same regex + uniqueness check, plain update. No ledger involvement.
+- **`POST /auth/email`** — removed. Its only job was attaching an email to an account that started without one; that case no longer exists once email is required at signup.
+- `POST /auth/magic-link` and `GET /auth/magic-link/consume` are unchanged — still the returning-user login path.
+
+**Worth doing in the same PR, optional but cheap since this code area is already open:** `GET /auth/magic-link/consume` is a state-changing GET, accepted in Phase 4 because it was a rarely-hit recovery path. It's about to get a sibling (`signup` consumption) that will be the primary way every account gets created — worth giving both the same fix: the link lands on an SPA page that fires the real `POST` on mount (or on a click), rather than a bot doing a plain `GET` on the link ever mutating anything.
+
+### Frontend (`apps/web`)
+
+- `OnboardingScreen.tsx` — add a required `email` field. Change `username` to prefilled-but-editable: a small client-side generator (adjective+noun+2-digit suffix, no dependency, no network call) fills it in on mount; the user can type over it. Submit calls `POST /auth/signup` and moves to a "check your inbox" state instead of landing in the app immediately — signup no longer sets a session synchronously.
+- New route `apps/web/src/app/auth/verify-signup/` (sibling of the existing `auth/verify` login-consume route) — reads `token` from the query string, calls `POST /auth/signup/consume` on mount. Success lands in the app. `409` shows an inline "that username's taken" retry (prefilled with a fresh generated alternative), resubmitting the same token. Expired/invalid token shows a "resend" link back to the signup form.
+- New username-edit control, wherever account settings end up living (no settings/profile surface exists yet — this phase needs to add the minimal one, or hang it off the existing portfolio/account menu if that's cheaper). Calls `PATCH /auth/username`.
+- `SignInPanel.tsx` — unchanged, it's already the "I already have an account" path.
+- Remove the stale "claim-username signup has no password" comment/copy in `SignInPanel.tsx` and any onboarding copy implying email is attached later — no longer accurate once email is mandatory up front.
+
+### Removing existing users (prod and local)
+
+`users.email not null` can't apply over rows that currently have `email = null`, so some form of cutover is required for this migration to apply at all — this isn't optional cleanup, it's a precondition. Scope is every user-scoped table, not just `users`: `users`, `sessions`, `magic_links`, `transactions`, `balance_cache`, `position_cache`, `equity_snapshots`, `leaderboard_scout`, and the new `pending_signups`. **Market/index data is never touched** — `artists`, `metric_snapshots`, `index_snapshots`, `price_history` are real accumulated Last.fm history with no way to backfill (per CLAUDE.md's Gotchas), completely independent of user accounts.
+
+- **Local** — nothing new to build. `ax reset` already drops and rebuilds everything including users; run it after the migration lands.
+- **Prod** — this is a real exception to CLAUDE.md rule 2 ("`transactions` is append-only, no `DELETE`, ever"), not a pattern to repeat. Treat it that way explicitly:
+  - Confirm the current row count in `users` first (Phase 5's own notes suggest no real friend has clicked through the app yet, but verify rather than assume).
+  - Run as a **manual, confirmed, one-time SQL statement against the Railway DB**, not as an Alembic migration step — migrations replay in CI and fresh dev/test databases; a `DELETE`/`TRUNCATE` baked into one would silently nuke rows in every context that runs migrations from scratch, which is the opposite of what a one-time cutover should do.
+  - `TRUNCATE users, sessions, magic_links, transactions, balance_cache, position_cache, equity_snapshots, leaderboard_scout, pending_signups RESTART IDENTITY CASCADE;` — run this, confirm it, *then* deploy the schema migration that adds `email not null`.
+  - Get explicit go-ahead before running this against the Railway DB — it's exactly the kind of hard-to-reverse, shared-state action CLAUDE.md's execution-care rules call out, distinct from anything a migration or test suite does automatically.
+
+### Testing
+
+- Integration (real Postgres, mirroring Phase 4's "signup grants exactly once" test): request→consume happy path grants exactly once; consuming with a taken username 409s without setting `consumed_at`, and a retry with a different username against the same token then succeeds; an expired or already-consumed token is rejected; requesting signup for an email that already has a verified account sends a login link and creates no second user, still 202; `users.email not null` holds as a DB-level backstop, not just app-level validation.
+- E2E — the existing claim-username Playwright spec updates to go through `ConsoleEmailProvider` + the new consume route, the same pattern the magic-link recovery spec already established for reading a console-logged token with no real inbox.
+
+### Done when
+
+A script runs signup-request → read the console-emailed token → consume → lands in the app with a session and the starting balance; a second run against the same email with a different chosen username, deliberately colliding with the first account's username, gets a 409 and succeeds on retry without a second email being sent; `PATCH /auth/username` changes a logged-in user's name and the old one becomes claimable again.
+
+### As built
+
+`services/api/src/ax/api/username_gen.py` (new module) + `api/routers/auth.py` (rewritten) + `db/models.py`'s new `PendingSignup` + migration `4a63168fc719`. Verified against the real dev DB via `ax reset` (which now writes synthetic users' emails too — `cli.py`'s `_simulate_trades` and `promote-admin`'s test harness both needed a `User(..., email=...)` fix once the column went `NOT NULL`) and against a real browser: 5 Playwright specs green three runs in a row, including a new one for the exact username-collision "Done when" scenario.
+
+Decisions and surprises worth carrying forward:
+
+- **Username generation for an omitted `username` is deferred to consume time, not request time**, a deliberate reading of this phase's own endpoint text rather than a literal one. `POST /auth/signup` still "generates one if blank/omitted" from the caller's perspective, but the actual candidate string isn't produced until `POST /auth/signup/consume` runs — less staleness for a suggested name to go stale against newly-created accounts over the token's 15-minute window, and it means `pending_signups.requested_username` doubles as the "did the caller choose this, or did the server?" flag for free: `NULL` means the server's problem (silent retry on collision), non-`NULL` means the caller's (409). No extra schema needed beyond PLAN.md's own literal column list.
+- **Both consume endpoints — signup and magic-link login — converted `GET` → `POST`, not just the new one.** The "worth doing in the same PR" note above was optional; done anyway since the file was already open and login-consume was about to get a structurally identical sibling.
+- **`consume_magic_link`'s "attach email if it differs" branch was dead code after this phase and got deleted, not left in.** It existed in Phase 4 to let a magic link double as an email-attach confirmation; `POST /auth/email` is gone and every `MagicLink` is now issued only for an address the target user's account already carries, so `user.email != link.email` can never be true. Removed rather than kept "just in case" per the no-dead-code convention.
+- **No settings/profile page was built.** `PATCH /auth/username`'s only UI is a `@username` button on the Portfolio page's header that opens `UsernameEditDialog` — the "hang it off the existing portfolio/account menu if that's cheaper" option this phase's own frontend notes offered, taken because a dedicated settings route would be one new page for one field.
+- **The test-suite ripple was the single biggest chunk of this phase's diff, not the auth logic itself.** Making email mandatory broke the one-shot `POST /auth/signup` call every other router's test file relied on for setup — 27 call sites across 7 files (`test_trades_api.py`, `test_portfolio_api.py`, `test_leaderboard_api.py`, `test_leaderboard_job.py`, `test_reconcile_job.py`, `test_admin_api.py`, `test_artists_api.py`), plus four direct `User(username=...)` constructions (`cli.py`'s `_simulate_trades`, and three test files' own setup code) that now needed an `email=`. Fixed with one new `tests/conftest.py::complete_signup` helper (request → consume → return the same `{"user": ..., "cash_cents": ...}` shape the old endpoint returned directly) that every affected file's own local `_signup` wrapper now calls, rather than each file re-deriving the request/consume dance independently.
+- **One Playwright spec added beyond what this phase's own testing section asked for**: `signup-username-collision.spec.ts`, covering the exact scenario this phase's "Done when" describes end to end in a real browser (claim a username for real, deliberately collide with a second signup, hit the 409 retry screen, resolve it) — the integration test suite covers the same logic at the HTTP layer, but this is the one behavior specific enough to this phase's own acceptance bar to be worth a dedicated browser check rather than folding into the existing claim-username spec.
+- **Not yet deployed to Railway.** This phase's own migration requires a real precondition Phase 1–6 never did: every existing prod `users` row (and everything that hangs off it — `sessions`, `magic_links`, `transactions`, `balance_cache`, `position_cache`, `equity_snapshots`, `leaderboard_scout`) has to be truncated before `users.email NOT NULL` can apply. That is a real, hard-to-reverse, shared-state action against the production database — explicit go-ahead is required before running it, and it has not been requested or run this session. `ax reset` already proves the local/CI path (fresh schema, migration applies cleanly, `alembic check` clean).
+- **Test coverage:** 251 tests total (7 new in `test_auth_api.py`'s rewrite plus one new pure-core test for `pending_signup_expiry`), 99.68% coverage on `ax.core` against the 90% gate. 5 Playwright specs green, run three times to check for flakiness (Phase 6's own bar).
 
 ---
 

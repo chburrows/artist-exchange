@@ -1,36 +1,41 @@
-"""Claim-a-username auth: session cookie, optional email + magic-link
-recovery (PLAN.md's locked decision — no passwords).
+"""Required-email signup, session cookie, magic-link recovery (PLAN.md
+Phase 7 — no passwords, still the locked decision).
 
-**Signup grants exactly once**, in the same transaction as the User
-insert and the session it returns — a client that never sees the
-response still has an account with a balance, never a balance-less
-account or a duplicate grant on retry.
+**Nothing in `users` exists until an emailed link is clicked.** `POST
+/auth/signup` only ever writes a `PendingSignup` row; `POST
+/auth/signup/consume` is what creates the user, grants
+`STARTING_BALANCE_CENTS`, and opens the session, all in one transaction —
+this is what makes eager signup-spam (squatting usernames, or triggering
+grants, without ever proving inbox ownership) structurally impossible
+rather than merely discouraged.
+
+**`users.email` is mandatory and always verified.** Phase 4's `POST
+/auth/email` (attach an email after a username-only signup) is gone —
+there is no longer a "signed up but unverified/no email" state to attach
+one to. `magic_links` now exists solely for returning-user login/recovery.
 
 **Magic links always resolve to a `user_id` chosen at creation time**,
 never by looking up `email` at consume time — see `MagicLink` in
-`db/models.py` for why that distinction is load-bearing (it's what makes
-attaching an unverified email safe). Consuming a link is the only thing
-that ever writes `users.email`, which is what "attach" actually means:
-proof of mailbox control, not just an unverified claim.
+`db/models.py` for the (now mostly historical, but still load-bearing)
+reasoning.
 
-**`GET /auth/magic-link/consume` is a GET that changes state** (marks
-the link used, creates a session). That's the standard shape for
-"click the link in your email" and is accepted here — the trade-off is
-that an email-scanning proxy that prefetches links could burn a token
-before a real click. `MAGIC_LINK_TTL_MINUTES = 15` and the low stakes of
-a play-money account make that an acceptable v1 risk, not a design flaw
-to fix with a confirm-click page (that's a Phase 5 UI concern, not an
-API one).
+**Both consume endpoints are `POST`, not `GET`.** A state-changing `GET`
+was accepted in Phase 4 as a rarely-hit recovery path, but signup
+consumption is about to become the primary way every account gets
+created — worth closing the "an email-scanning proxy prefetches the link
+and silently burns the token" gap for both at once, since this file was
+already open for exactly that reason.
 """
 
 import logging
+import re
 import secrets
 from datetime import UTC, datetime
 from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Cookie, HTTPException, Response, status
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from ax.api.deps import (
@@ -41,11 +46,12 @@ from ax.api.deps import (
     SessionSecretDep,
     SettingsDep,
 )
-from ax.core.auth import hash_token, magic_link_expiry, session_expiry
+from ax.api.username_gen import random_username
+from ax.core.auth import hash_token, magic_link_expiry, pending_signup_expiry, session_expiry
 from ax.core.config import STARTING_BALANCE_CENTS
 from ax.core.ledger import grant_entries
 from ax.db.ledger import lock_balance_cache, write_entries
-from ax.db.models import MagicLink, User
+from ax.db.models import MagicLink, PendingSignup, User
 from ax.db.models import Session as SessionModel
 from ax.providers.email import EmailMessage, EmailSendError
 from ax.settings import Settings
@@ -56,18 +62,45 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 _USERNAME_PATTERN = r"^[A-Za-z0-9_-]{3,24}$"
 # Not RFC 5322 -- just enough to reject obvious garbage before it reaches
-# Resend. The magic link itself is the real verification.
+# the email provider. The link itself is the real verification.
 _EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+# `random_username()`'s collision odds are low (20 * 20 * 100 candidates)
+# but not zero, and a caller-supplied name never retries at all -- see
+# `consume_signup`.
+_MAX_USERNAME_GENERATION_ATTEMPTS = 5
+
+
+def _normalize_username(value: str | None) -> str | None:
+    """Blank or omitted both mean "the caller didn't choose one" --
+    treated identically so a client that submits an empty string instead
+    of leaving the field out doesn't get a 422 where it should instead
+    fall back to a server-generated name."""
+    if not value:
+        return None
+    if not re.fullmatch(_USERNAME_PATTERN, value):
+        raise ValueError(f"username must match {_USERNAME_PATTERN}")
+    return value
 
 
 class UserOut(BaseModel):
     id: int
     username: str
-    email: str | None
+    email: str
 
 
 class SignupRequest(BaseModel):
-    username: str = Field(pattern=_USERNAME_PATTERN)
+    email: str = Field(pattern=_EMAIL_PATTERN)
+    username: str | None = None
+
+    _normalize = field_validator("username")(_normalize_username)
+
+
+class SignupConsumeRequest(BaseModel):
+    token: str
+    username: str | None = None
+
+    _normalize = field_validator("username")(_normalize_username)
 
 
 class SignupResponse(BaseModel):
@@ -75,8 +108,16 @@ class SignupResponse(BaseModel):
     cash_cents: int
 
 
+class UsernameUpdateRequest(BaseModel):
+    username: str = Field(pattern=_USERNAME_PATTERN)
+
+
 class EmailRequest(BaseModel):
     email: str = Field(pattern=_EMAIL_PATTERN)
+
+
+class MagicLinkConsumeRequest(BaseModel):
+    token: str
 
 
 class DetailResponse(BaseModel):
@@ -140,28 +181,164 @@ def _create_session(db: DbDep, session_secret: bytes, user_id: int, now: datetim
     return raw_token
 
 
-@router.post("/signup", status_code=status.HTTP_201_CREATED)
-def signup(
+def _send_link(
+    email_provider: EmailProviderDep,
+    settings: SettingsDep,
+    to: str,
+    subject: str,
+    path: str,
+    raw_token: str,
+) -> None:
+    link = f"{settings.web_origin}/{path}?token={raw_token}"
+    try:
+        email_provider.send(
+            EmailMessage(
+                to=to,
+                subject=subject,
+                html=(
+                    f'<p>Click to continue: <a href="{link}">{link}</a></p>'
+                    f"<p>This link expires in 15 minutes and can only be used once.</p>"
+                ),
+            )
+        )
+    except EmailSendError as exc:
+        log.warning("email send failed for %s: %s", to, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="could not send email, try again"
+        ) from exc
+
+
+@router.post("/signup", status_code=status.HTTP_202_ACCEPTED)
+def request_signup(
     body: SignupRequest,
+    db: DbDep,
+    settings: SettingsDep,
+    session_secret: SessionSecretDep,
+    email_provider: EmailProviderDep,
+) -> DetailResponse:
+    """Request step of verify-before-create signup. Always 202 regardless
+    of which branch below fires -- same anti-enumeration shape
+    `/auth/magic-link` already uses, so a prober can't distinguish "this
+    address already has an account" from "a new signup was queued"."""
+    now = datetime.now(UTC)
+
+    existing_user = db.scalars(select(User).where(User.email == body.email)).one_or_none()
+    if existing_user is not None:
+        # A verified account already owns this address -- this is a
+        # login, not a signup. No second pending signup is created for
+        # an address that will never consume one.
+        raw_token = secrets.token_urlsafe(32)
+        db.add(
+            MagicLink(
+                user_id=existing_user.id,
+                email=existing_user.email,
+                token_hash=hash_token(session_secret, raw_token),
+                expires_at=magic_link_expiry(now),
+            )
+        )
+        db.commit()
+        _send_link(
+            email_provider,
+            settings,
+            body.email,
+            "Your Artist Exchange sign-in link",
+            "auth/verify",
+            raw_token,
+        )
+        return DetailResponse(detail="check your email to continue")
+
+    # At most one live pending signup per address -- an abandoned earlier
+    # request must not linger once a second one comes in for the same
+    # email, or "which token is current" becomes ambiguous.
+    db.execute(
+        delete(PendingSignup).where(
+            PendingSignup.email == body.email, PendingSignup.consumed_at.is_(None)
+        )
+    )
+
+    raw_token = secrets.token_urlsafe(32)
+    db.add(
+        PendingSignup(
+            email=body.email,
+            requested_username=body.username,
+            token_hash=hash_token(session_secret, raw_token),
+            expires_at=pending_signup_expiry(now),
+        )
+    )
+    db.commit()
+
+    _send_link(
+        email_provider,
+        settings,
+        body.email,
+        "Confirm your Artist Exchange signup",
+        "auth/verify-signup",
+        raw_token,
+    )
+    return DetailResponse(detail="check your email to continue")
+
+
+@router.post("/signup/consume", status_code=status.HTTP_201_CREATED)
+def consume_signup(
+    body: SignupConsumeRequest,
     response: Response,
     db: DbDep,
     settings: SettingsDep,
     session_secret: SessionSecretDep,
 ) -> SignupResponse:
-    """Claim a username, grant `STARTING_BALANCE_CENTS`, and log in --
-    one transaction, so a crash between "user created" and "grant
-    written" is structurally impossible rather than merely unlikely."""
-    now = datetime.now(UTC)
-    user = User(username=body.username)
-    db.add(user)
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="username already taken"
-        ) from exc
+    """Creates `users` + the `GRANT` ledger row + a `Session`, all in one
+    transaction (the same shape Phase 4's one-shot signup used, just
+    moved behind email verification).
 
+    Username collision handling has one rule: a value nobody chose (this
+    request omitted `username` *and* the original request did too) is
+    the server's problem, retried in-process with a fresh generated
+    candidate; a value somebody chose -- typed at request time, or
+    supplied again here -- is a 409 for the caller to resolve, and
+    `consumed_at` is deliberately left unset so the token (proof of inbox
+    ownership) is still good for a retry against a different username.
+    """
+    now = datetime.now(UTC)
+    token_hash = hash_token(session_secret, body.token)
+    pending = db.scalars(
+        select(PendingSignup).where(
+            PendingSignup.token_hash == token_hash,
+            PendingSignup.consumed_at.is_(None),
+            PendingSignup.expires_at > now,
+        )
+    ).one_or_none()
+    if pending is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid or expired signup link"
+        )
+
+    if body.username is not None:
+        candidate, server_generated = body.username, False
+    elif pending.requested_username is not None:
+        candidate, server_generated = pending.requested_username, False
+    else:
+        candidate, server_generated = random_username(), True
+
+    attempts = _MAX_USERNAME_GENERATION_ATTEMPTS if server_generated else 1
+    user = None
+    for attempt in range(attempts):
+        user = User(username=candidate, email=pending.email)
+        db.add(user)
+        try:
+            db.flush()
+            break
+        except IntegrityError:
+            db.rollback()
+            user = None
+            if not server_generated or attempt == attempts - 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail="username already taken"
+                ) from None
+            candidate = random_username()
+
+    assert user is not None, "loop above always breaks with a user or raises"
+
+    pending.consumed_at = now
     balance = lock_balance_cache(db, user.id)
     write_entries(db, balance, user.id, grant_entries(STARTING_BALANCE_CENTS))
 
@@ -173,6 +350,24 @@ def signup(
         user=UserOut(id=user.id, username=user.username, email=user.email),
         cash_cents=balance.cash_cents,
     )
+
+
+@router.patch("/username")
+def update_username(
+    body: UsernameUpdateRequest,
+    db: DbDep,
+    user: CurrentUserDep,
+) -> UserOut:
+    user.username = body.username
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="username already taken"
+        ) from exc
+    db.commit()
+    return UserOut(id=user.id, username=user.username, email=user.email)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -209,64 +404,6 @@ def me(user: CurrentUserDep) -> UserOut:
     return UserOut(id=user.id, username=user.username, email=user.email)
 
 
-def _send_magic_link(
-    email_provider: EmailProviderDep, settings: SettingsDep, to: str, raw_token: str
-) -> None:
-    link = f"{settings.web_origin}/auth/verify?token={raw_token}"
-    try:
-        email_provider.send(
-            EmailMessage(
-                to=to,
-                subject="Your Artist Exchange sign-in link",
-                html=(
-                    f'<p>Click to continue: <a href="{link}">{link}</a></p>'
-                    f"<p>This link expires in 15 minutes and can only be used once.</p>"
-                ),
-            )
-        )
-    except EmailSendError as exc:
-        log.warning("magic-link send failed for %s: %s", to, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail="could not send email, try again"
-        ) from exc
-
-
-@router.post("/email", status_code=status.HTTP_202_ACCEPTED)
-def request_email_attach(
-    body: EmailRequest,
-    db: DbDep,
-    settings: SettingsDep,
-    session_secret: SessionSecretDep,
-    email_provider: EmailProviderDep,
-    user: CurrentUserDep,
-) -> DetailResponse:
-    """Attach (or change) the current user's email. Nothing is written to
-    `users.email` yet -- only consuming the resulting link proves mailbox
-    control and actually attaches it (see module docstring)."""
-    existing = db.scalars(
-        select(User).where(User.email == body.email, User.id != user.id)
-    ).one_or_none()
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="email already attached to another account"
-        )
-
-    now = datetime.now(UTC)
-    raw_token = secrets.token_urlsafe(32)
-    db.add(
-        MagicLink(
-            user_id=user.id,
-            email=body.email,
-            token_hash=hash_token(session_secret, raw_token),
-            expires_at=magic_link_expiry(now),
-        )
-    )
-    db.commit()
-
-    _send_magic_link(email_provider, settings, body.email, raw_token)
-    return DetailResponse(detail="check your email to confirm")
-
-
 @router.post("/magic-link", status_code=status.HTTP_202_ACCEPTED)
 def request_magic_link(
     body: EmailRequest,
@@ -275,10 +412,10 @@ def request_magic_link(
     session_secret: SessionSecretDep,
     email_provider: EmailProviderDep,
 ) -> DetailResponse:
-    """Recovery on a new device: request a login link for an already-
-    attached email. Always returns the same response whether or not the
-    email is registered -- a differing response would let anyone probe
-    which addresses have accounts."""
+    """Recovery on a new device: request a login link for an existing
+    account. Always returns the same response whether or not the email
+    is registered -- a differing response would let anyone probe which
+    addresses have accounts."""
     user = db.scalars(select(User).where(User.email == body.email)).one_or_none()
     if user is not None:
         now = datetime.now(UTC)
@@ -286,27 +423,34 @@ def request_magic_link(
         db.add(
             MagicLink(
                 user_id=user.id,
-                email=body.email,
+                email=user.email,
                 token_hash=hash_token(session_secret, raw_token),
                 expires_at=magic_link_expiry(now),
             )
         )
         db.commit()
-        _send_magic_link(email_provider, settings, body.email, raw_token)
+        _send_link(
+            email_provider,
+            settings,
+            body.email,
+            "Your Artist Exchange sign-in link",
+            "auth/verify",
+            raw_token,
+        )
 
     return DetailResponse(detail="if that email is registered, a link was sent")
 
 
-@router.get("/magic-link/consume")
+@router.post("/magic-link/consume")
 def consume_magic_link(
-    token: str,
+    body: MagicLinkConsumeRequest,
     response: Response,
     db: DbDep,
     settings: SettingsDep,
     session_secret: SessionSecretDep,
 ) -> ConsumeResponse:
     now = datetime.now(UTC)
-    token_hash = hash_token(session_secret, token)
+    token_hash = hash_token(session_secret, body.token)
     stmt = select(MagicLink).where(
         MagicLink.token_hash == token_hash,
         MagicLink.used_at.is_(None),
@@ -321,19 +465,6 @@ def consume_magic_link(
     link.used_at = now
     user = db.get(User, link.user_id)
     assert user is not None, "magic_links.user_id is a NOT NULL FK to users"
-
-    if user.email != link.email:
-        user.email = link.email
-        try:
-            db.flush()
-        except IntegrityError as exc:
-            db.rollback()
-            # Someone else attached and confirmed this exact address
-            # between the request and this click.
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="email already attached to another account",
-            ) from exc
 
     raw_token = _create_session(db, session_secret, user.id, now)
     db.commit()

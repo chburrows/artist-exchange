@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from ax.db.models import TIER_BLUE_CHIP, TIER_GROWTH, PriceHistory
-from tests.conftest import ArtistFactory, ListArtist
+from tests.conftest import ArtistFactory, FakeEmailProvider, ListArtist, complete_signup
 
 
 def test_list_excludes_warming_up_artists(
@@ -153,11 +153,12 @@ def test_history_reflects_a_trade(
     session: OrmSession,
     make_artist: ArtistFactory,
     list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     artist = make_artist("Traded")
     list_artist(artist, fair_value_cents=1_000)
 
-    client.post("/auth/signup", json={"username": "chart-trader"})
+    complete_signup(client, email_provider, "chart-trader")
     client.post("/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 2})
 
     response = client.get(f"/artists/{artist.slug}/history")

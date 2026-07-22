@@ -54,7 +54,10 @@ class User(Base):
     # by the column type rather than by remembering to .lower() at every
     # call site.
     username: Mapped[str] = mapped_column(CITEXT, unique=True)
-    email: Mapped[str | None] = mapped_column(CITEXT, unique=True, nullable=True)
+    # Mandatory since Phase 7 (`pending_signups` verifies it before this
+    # row ever exists) -- previously optional, attached post-hoc via
+    # `POST /auth/email` (removed). See `PendingSignup` for why.
+    email: Mapped[str] = mapped_column(CITEXT, unique=True)
     # Gates the /admin/* endpoints (`api/deps.py::get_current_admin_user`).
     # No self-service path to `True` exists anywhere in the app -- only
     # `ax promote-admin`, run by someone who already has database/deploy
@@ -81,20 +84,16 @@ class MagicLink(Base):
     this adds `user_id`, a deliberate deviation, for the same reason
     `price_history` deviated from its own PLAN.md spec (see that class).
 
-    Without `user_id`, consuming a link would have to resolve the target
-    user by looking up `email` against `users.email` at consume time. That
-    makes "attach a new email" unsafe: a link is issued for an address
-    before it's proven to belong to the requester, so if attach wrote
-    `users.email` immediately, an attacker could pre-claim a victim's real
-    address on the attacker's own account. The victim, later requesting
-    their *own* password-less recovery for that address, would receive a
-    link that logs them into the attacker's account instead.
-
-    Binding `user_id` at link-creation time (always the account the link
-    is *for*, chosen server-side — the current session for an attach
-    request, or a lookup-by-email for a recovery request) removes the
-    ambiguity: consuming a link always logs in as that specific user, and
-    only then, having proven mailbox control, stamps `users.email`.
+    Originally load-bearing for Phase 4's now-removed `POST /auth/email`
+    (attach-post-signup): without `user_id`, consuming a link would have
+    had to resolve the target user by looking up `email` at consume time,
+    which let an attacker pre-claim a victim's real address on the
+    attacker's own account before the victim ever proved they owned it.
+    Phase 7 removed that endpoint (email is mandatory and verified at
+    signup instead, via `PendingSignup`), but `user_id` stays: it's still
+    what makes a link unambiguously "log in as this specific user" for
+    the recovery flow this table now exists solely for, rather than a
+    lookup against a column a concurrent request could be racing.
     """
 
     __tablename__ = "magic_links"
@@ -105,6 +104,45 @@ class MagicLink(Base):
     token_hash: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
     expires_at: Mapped[datetime]
     used_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
+class PendingSignup(Base):
+    """A signup request awaiting email verification (Phase 7).
+
+    Nothing in `users` exists until the emailed link is clicked. Creating
+    the user row eagerly, on form submit, would let anyone spam signups
+    to squat usernames or trigger a `STARTING_BALANCE_CENTS` grant without
+    ever proving they own the inbox — so this row holds the request, and
+    consuming it is what creates the user, grants the balance, and opens
+    the session, all at once, mirroring the pre-Phase-7 one-transaction
+    signup just moved to sit behind verification.
+
+    Deliberately a separate table from `magic_links`, not a repurposed row
+    there: `magic_links.user_id` is bound at creation specifically so a
+    link can only ever be "log in as this already-known user" (see that
+    class's docstring). A signup token has no `user_id` yet by definition
+    — reusing that table would weaken the invariant it exists to hold.
+
+    `requested_username` is nullable, not because it's optional data but
+    because of *when* it's filled in: NULL means the request omitted a
+    username, and `POST /auth/signup/consume` generates one at consume
+    time rather than at request time, so a generated suggestion has less
+    time to go stale against newly-created accounts before it's actually
+    used. A non-NULL value is one the caller explicitly chose (typed at
+    request time, or supplied again at consume time) — collisions on that
+    path are a 409 for the caller to resolve, never silently retried
+    (`api/routers/auth.py`).
+    """
+
+    __tablename__ = "pending_signups"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(CITEXT, index=True)
+    requested_username: Mapped[str | None] = mapped_column(CITEXT, nullable=True)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    expires_at: Mapped[datetime]
+    consumed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 

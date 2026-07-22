@@ -218,3 +218,8 @@ positive costs the attacker their whole thesis."""
 
 SESSION_TTL_DAYS = 90
 MAGIC_LINK_TTL_MINUTES = 15
+PENDING_SIGNUP_TTL_MINUTES = 15
+"""How long an unverified signup request stays consumable (Phase 7).
+Starts equal to `MAGIC_LINK_TTL_MINUTES` but is its own named constant --
+the signup-verification window and the login/recovery window are
+conceptually independent and may want to diverge later."""

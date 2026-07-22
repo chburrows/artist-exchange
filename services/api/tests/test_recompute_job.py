@@ -795,7 +795,7 @@ def test_net_supplies_returns_native_int_not_decimal(
 ) -> None:
     artist_a = make_artist("Has Supply")
     artist_b = make_artist("Zero Supply")
-    user = User(username="tester")
+    user = User(username="tester", email="tester@example.com")
     session.add(user)
     session.flush()
     session.add(

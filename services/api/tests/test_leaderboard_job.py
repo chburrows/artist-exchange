@@ -12,18 +12,18 @@ from sqlalchemy.orm import Session
 from ax.core.config import STARTING_BALANCE_CENTS
 from ax.db.models import EquitySnapshot, LeaderboardScout
 from ax.jobs.leaderboard import run_leaderboard_snapshot
-from tests.conftest import ArtistFactory, ListArtist
+from tests.conftest import ArtistFactory, FakeEmailProvider, ListArtist, complete_signup
 
 
-def _signup(client: TestClient, username: str) -> int:
-    body = client.post("/auth/signup", json={"username": username}).json()
+def _signup(client: TestClient, email_provider: FakeEmailProvider, username: str) -> int:
+    body = complete_signup(client, email_provider, username)
     return int(body["user"]["id"])
 
 
 def test_fresh_signup_gets_an_equity_snapshot_at_starting_balance(
-    client: TestClient, session: Session
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
 ) -> None:
-    user_id = _signup(client, "freshling")
+    user_id = _signup(client, email_provider, "freshling")
 
     result = run_leaderboard_snapshot(session, date(2026, 1, 1), now=datetime.now(UTC))
 
@@ -34,9 +34,13 @@ def test_fresh_signup_gets_an_equity_snapshot_at_starting_balance(
 
 
 def test_equity_snapshot_reflects_a_position(
-    client: TestClient, session: Session, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    session: Session,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    user_id = _signup(client, "holder")
+    user_id = _signup(client, email_provider, "holder")
     artist = make_artist("Held")
     list_artist(artist, fair_value_cents=1_000)
     client.post("/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 4})
@@ -53,9 +57,9 @@ def test_equity_snapshot_reflects_a_position(
 
 
 def test_rerunning_the_same_date_upserts_not_duplicates(
-    client: TestClient, session: Session
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
 ) -> None:
-    _signup(client, "retried")
+    _signup(client, email_provider, "retried")
 
     run_leaderboard_snapshot(session, date(2026, 1, 1), now=datetime.now(UTC))
     run_leaderboard_snapshot(session, date(2026, 1, 1), now=datetime.now(UTC))
@@ -67,9 +71,13 @@ def test_rerunning_the_same_date_upserts_not_duplicates(
 
 
 def test_scout_qualified_buy_produces_a_leaderboard_scout_row(
-    client: TestClient, session: Session, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    session: Session,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    user_id = _signup(client, "scout")
+    user_id = _signup(client, email_provider, "scout")
     artist = make_artist("Undervalued", tier="growth")
     # index_score 30 < SCOUT_DISCOVERY_INDEX_MAX (45), fair_value_cents
     # 200 < SCOUT_DISCOVERY_PRICE_CENTS (1_000) -- both thresholds, C12.
@@ -94,9 +102,13 @@ def test_scout_qualified_buy_produces_a_leaderboard_scout_row(
 
 
 def test_non_scout_buy_produces_no_scout_row(
-    client: TestClient, session: Session, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    session: Session,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    user_id = _signup(client, "not-a-scout")
+    user_id = _signup(client, email_provider, "not-a-scout")
     artist = make_artist("Blue Chip", tier="blue_chip")
     # index_score 50 >= SCOUT_DISCOVERY_INDEX_MAX -- not scout-qualified.
     list_artist(artist, fair_value_cents=5_000, index_score=50.0)
@@ -109,9 +121,13 @@ def test_non_scout_buy_produces_no_scout_row(
 
 
 def test_leaderboard_scout_drops_a_row_once_the_position_is_sold(
-    client: TestClient, session: Session, make_artist: ArtistFactory, list_artist: ListArtist
+    client: TestClient,
+    session: Session,
+    make_artist: ArtistFactory,
+    list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    user_id = _signup(client, "sold-out-scout")
+    user_id = _signup(client, email_provider, "sold-out-scout")
     artist = make_artist("Once Undervalued")
     list_artist(artist, fair_value_cents=200, index_score=30.0)
     client.post("/trades", json={"artist_slug": artist.slug, "side": "buy", "shares": 5})
@@ -131,9 +147,9 @@ def test_leaderboard_endpoint_requires_a_token(client: TestClient) -> None:
 
 
 def test_leaderboard_endpoint_reports_users_processed(
-    client: TestClient, auth_headers: dict[str, str]
+    client: TestClient, auth_headers: dict[str, str], email_provider: FakeEmailProvider
 ) -> None:
-    _signup(client, "endpoint-check")
+    _signup(client, email_provider, "endpoint-check")
 
     response = client.post("/internal/jobs/leaderboard", headers=auth_headers)
 

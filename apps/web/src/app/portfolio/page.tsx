@@ -6,6 +6,7 @@ import { useState } from "react";
 import { HoldingRow } from "@/components/HoldingRow";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { ShareCardDialog } from "@/components/ShareCardDialog";
+import { UsernameEditDialog } from "@/components/UsernameEditDialog";
 import { STARTING_BALANCE_CENTS } from "@/lib/constants";
 import { formatCents, formatPct, pctChange } from "@/lib/format";
 import { useMe, usePortfolio, usePortfolioHistory, useScoutLeaderboard } from "@/lib/queries";
@@ -22,6 +23,7 @@ export default function PortfolioPage() {
   const [range, setRange] = useState<Range>("1M");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [usernameEditOpen, setUsernameEditOpen] = useState(false);
 
   if (me.isLoading || (me.data && portfolio.isLoading)) {
     return (
@@ -97,7 +99,14 @@ export default function PortfolioPage() {
     <div className="flex flex-col gap-6 pb-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-xs text-muted-foreground">Total value</div>
+          <button
+            type="button"
+            onClick={() => setUsernameEditOpen(true)}
+            className="cursor-pointer text-xs font-bold text-muted-foreground underline underline-offset-2"
+          >
+            @{me.data.username}
+          </button>
+          <div className="mt-1 text-xs text-muted-foreground">Total value</div>
           <div className="text-3xl font-extrabold tracking-tight">
             {formatCents(equity_cents)}
           </div>
@@ -221,6 +230,11 @@ export default function PortfolioPage() {
         equityCents={equity_cents}
         totalGainPct={totalGainPct}
         topPositions={positions}
+      />
+      <UsernameEditDialog
+        open={usernameEditOpen}
+        onOpenChange={setUsernameEditOpen}
+        currentUsername={me.data.username}
       />
     </div>
   );

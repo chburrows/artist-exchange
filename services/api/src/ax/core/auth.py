@@ -18,7 +18,7 @@ import hashlib
 import hmac
 from datetime import datetime, timedelta
 
-from ax.core.config import MAGIC_LINK_TTL_MINUTES, SESSION_TTL_DAYS
+from ax.core.config import MAGIC_LINK_TTL_MINUTES, PENDING_SIGNUP_TTL_MINUTES, SESSION_TTL_DAYS
 
 
 def hash_token(secret: bytes, raw_token: str) -> bytes:
@@ -31,3 +31,7 @@ def session_expiry(now: datetime) -> datetime:
 
 def magic_link_expiry(now: datetime) -> datetime:
     return now + timedelta(minutes=MAGIC_LINK_TTL_MINUTES)
+
+
+def pending_signup_expiry(now: datetime) -> datetime:
+    return now + timedelta(minutes=PENDING_SIGNUP_TTL_MINUTES)

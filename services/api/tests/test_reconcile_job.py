@@ -17,11 +17,11 @@ from sqlalchemy.orm import Session
 from ax.core.config import STARTING_BALANCE_CENTS
 from ax.db.models import BalanceCache, PositionCache
 from ax.jobs.reconcile import run_reconcile
-from tests.conftest import ArtistFactory, ListArtist
+from tests.conftest import ArtistFactory, FakeEmailProvider, ListArtist, complete_signup
 
 
-def _signup(client: TestClient, username: str) -> int:
-    body = client.post("/auth/signup", json={"username": username}).json()
+def _signup(client: TestClient, email_provider: FakeEmailProvider, username: str) -> int:
+    body = complete_signup(client, email_provider, username)
     return int(body["user"]["id"])
 
 
@@ -30,8 +30,9 @@ def test_no_drift_after_a_clean_trade_history(
     session: Session,
     make_artist: ArtistFactory,
     list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    user_id = _signup(client, "clean-trader")
+    user_id = _signup(client, email_provider, "clean-trader")
     artist = make_artist("Cleanly Traded")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -52,8 +53,10 @@ def test_no_drift_after_a_clean_trade_history(
     assert refreshed.realized_pnl_cents == position_before.realized_pnl_cents
 
 
-def test_repairs_corrupted_balance_cache(client: TestClient, session: Session) -> None:
-    user_id = _signup(client, "corrupted-balance")
+def test_repairs_corrupted_balance_cache(
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
+) -> None:
+    user_id = _signup(client, email_provider, "corrupted-balance")
 
     balance = session.get(BalanceCache, user_id)
     balance.cash_cents = 1  # simulate drift
@@ -71,8 +74,9 @@ def test_repairs_corrupted_position_cache(
     session: Session,
     make_artist: ArtistFactory,
     list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
-    user_id = _signup(client, "corrupted-position")
+    user_id = _signup(client, email_provider, "corrupted-position")
     artist = make_artist("Corrupted")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -92,8 +96,10 @@ def test_repairs_corrupted_position_cache(
     assert repaired.shares == true_shares
 
 
-def test_recreates_a_missing_balance_cache_row(client: TestClient, session: Session) -> None:
-    user_id = _signup(client, "missing-balance")
+def test_recreates_a_missing_balance_cache_row(
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
+) -> None:
+    user_id = _signup(client, email_provider, "missing-balance")
     session.delete(session.get(BalanceCache, user_id))
     session.flush()
 
@@ -108,11 +114,12 @@ def test_weighted_average_cost_survives_a_reconcile_round_trip(
     session: Session,
     make_artist: ArtistFactory,
     list_artist: ListArtist,
+    email_provider: FakeEmailProvider,
 ) -> None:
     """Two buys at different prices, then a partial sell -- exercises the
     real weighted-average/realized-pnl formulas (`ax.core.ledger`), not
     just share counts, through a full replay."""
-    user_id = _signup(client, "cost-basis")
+    user_id = _signup(client, email_provider, "cost-basis")
     artist = make_artist("Averaged")
     list_artist(artist, fair_value_cents=1_000)
 
@@ -140,9 +147,9 @@ def test_reconcile_endpoint_requires_a_token(client: TestClient) -> None:
 
 
 def test_reconcile_endpoint_reports_users_checked(
-    client: TestClient, auth_headers: dict[str, str]
+    client: TestClient, auth_headers: dict[str, str], email_provider: FakeEmailProvider
 ) -> None:
-    _signup(client, "endpoint-check")
+    _signup(client, email_provider, "endpoint-check")
 
     response = client.post("/internal/jobs/reconcile", headers=auth_headers)
 

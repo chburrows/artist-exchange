@@ -1,26 +1,6 @@
-import fs from "node:fs";
-
 import { expect, test } from "@playwright/test";
 
-import { API_BASE_URL, EMAIL_LOG_PATH } from "./config";
-
-/** Pulls the most recent magic-link URL sent to `email` out of
- * `ConsoleEmailProvider`'s log file -- the e2e equivalent of
- * `tests/conftest.py`'s `FakeEmailProvider.last_link()` in the Python
- * suite, reading the real (dev-only) provider's output instead of an
- * in-process fake. */
-function lastLinkFor(email: string): string {
-  const lines = fs.readFileSync(EMAIL_LOG_PATH, "utf-8").trim().split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const entry: { to: string; html: string } = JSON.parse(lines[i]);
-    if (entry.to === email) {
-      const match = entry.html.match(/href="([^"]+)"/);
-      if (!match) throw new Error(`no link found in the email sent to ${email}`);
-      return match[1];
-    }
-  }
-  throw new Error(`no email found for ${email} in ${EMAIL_LOG_PATH}`);
-}
+import { lastLinkFor } from "./email";
 
 test("magic-link recovery signs you back in on a fresh session", async ({ page }) => {
   // Kept within the username input's `maxLength={24}` (OnboardingScreen)
@@ -31,28 +11,14 @@ test("magic-link recovery signs you back in on a fresh session", async ({ page }
   const email = `${username}@example.com`;
 
   await page.goto("/");
+  await page.getByLabel("Email").fill(email);
   await page.getByLabel("Username").fill(username);
   await page.getByRole("button", { name: /get started/i }).click();
-  await expect(page.getByText(`Welcome back, ${username}`)).toBeVisible();
+  await expect(page.getByText(/check your inbox/i)).toBeVisible();
 
-  // There's no "attach email" UI yet (only recovery -- SignInPanel), so
-  // attaching one is test setup for the flow under test, done against
-  // the real endpoint using this page's own session cookie, not the flow
-  // this spec is actually verifying.
-  const attachStatus = await page.evaluate(
-    async ({ apiBaseUrl, email }) => {
-      const res = await fetch(`${apiBaseUrl}/auth/email`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      return res.status;
-    },
-    { apiBaseUrl: API_BASE_URL, email },
-  );
-  expect(attachStatus).toBe(202);
-
+  // Phase 7: email is mandatory and verified at signup itself, so there's
+  // no separate "attach an email" setup step here anymore -- the account
+  // already has the address the recovery flow below sends a link to.
   await page.goto(lastLinkFor(email));
   await expect(page.getByText(`Welcome back, ${username}`)).toBeVisible();
 
@@ -62,10 +28,10 @@ test("magic-link recovery signs you back in on a fresh session", async ({ page }
   await expect(page.getByLabel("Username")).toBeVisible();
 
   await page.getByRole("button", { name: "I already have an account" }).click();
-  // Not `exact: false` (the default): the dialog's own accessible name
-  // ("Sign in with email", from its DialogTitle) also substring-matches
-  // "Email" and resolves ambiguously alongside the real input.
-  await page.getByLabel("Email", { exact: true }).fill(email);
+  // Scoped to the dialog: the onboarding screen behind it now has its own
+  // "Email" field too (Phase 7), so an unscoped `getByLabel("Email")`
+  // would resolve ambiguously between the two.
+  await page.getByRole("dialog").getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Send sign-in link" }).click();
   await expect(page.getByText(/sign-in link is on its way/)).toBeVisible();
 

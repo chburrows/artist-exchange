@@ -6,8 +6,8 @@ injected `now`, not wall-clock time.
 
 from datetime import UTC, datetime, timedelta
 
-from ax.core.auth import hash_token, magic_link_expiry, session_expiry
-from ax.core.config import MAGIC_LINK_TTL_MINUTES, SESSION_TTL_DAYS
+from ax.core.auth import hash_token, magic_link_expiry, pending_signup_expiry, session_expiry
+from ax.core.config import MAGIC_LINK_TTL_MINUTES, PENDING_SIGNUP_TTL_MINUTES, SESSION_TTL_DAYS
 
 
 def test_hash_token_is_deterministic() -> None:
@@ -36,3 +36,8 @@ def test_session_expiry_uses_the_configured_ttl() -> None:
 def test_magic_link_expiry_uses_the_configured_ttl() -> None:
     now = datetime(2026, 1, 1, tzinfo=UTC)
     assert magic_link_expiry(now) == now + timedelta(minutes=MAGIC_LINK_TTL_MINUTES)
+
+
+def test_pending_signup_expiry_uses_the_configured_ttl() -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    assert pending_signup_expiry(now) == now + timedelta(minutes=PENDING_SIGNUP_TTL_MINUTES)

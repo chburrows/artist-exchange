@@ -9,7 +9,8 @@ import { ArtistAvatar } from "@/components/ArtistAvatar";
 import { STARTING_BALANCE_CENTS } from "@/lib/constants";
 import { errorMessage } from "@/lib/errors";
 import { formatCents } from "@/lib/format";
-import { useArtists, useSignup } from "@/lib/queries";
+import { useArtists, useRequestSignup } from "@/lib/queries";
+import { generateUsername } from "@/lib/username";
 
 import { SignInPanel } from "./SignInPanel";
 
@@ -20,16 +21,39 @@ const STEPS = [
 ];
 
 export function OnboardingScreen() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  // Prefilled-but-editable: a client-side suggestion so the field isn't
+  // empty on first render, not the value the server actually falls back
+  // to if this were left blank (that's `POST /auth/signup/consume`'s own
+  // generator -- see `services/api/src/ax/api/username_gen.py`).
+  const [username, setUsername] = useState(generateUsername);
   const [signInOpen, setSignInOpen] = useState(false);
-  const signup = useSignup();
+  const [checkInboxFor, setCheckInboxFor] = useState<string | null>(null);
+  const requestSignup = useRequestSignup();
   const roster = useArtists();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.length < 3) return;
-    signup.mutate(username);
+    if (!email || username.length < 3) return;
+    requestSignup.mutate(
+      { email, username },
+      { onSuccess: () => setCheckInboxFor(email) },
+    );
   };
+
+  if (checkInboxFor) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
+        <Logo />
+        <h1 className="text-2xl font-extrabold tracking-tight">Check your inbox</h1>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          We sent a confirmation link to <span className="font-bold">{checkInboxFor}</span>.
+          Click it to finish creating your account and claim your{" "}
+          {formatCents(STARTING_BALANCE_CENTS)}.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-lg flex-col items-center gap-5 py-10 text-center sm:py-16">
@@ -46,6 +70,17 @@ export function OnboardingScreen() {
 
       <form onSubmit={handleSubmit} className="flex w-full max-w-xs flex-col gap-3 pt-2">
         <div className="flex flex-col gap-1.5 text-left">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            required
+          />
+        </div>
+        <div className="flex flex-col gap-1.5 text-left">
           <Label htmlFor="username">Username</Label>
           <Input
             id="username"
@@ -58,13 +93,15 @@ export function OnboardingScreen() {
             required
           />
         </div>
-        {signup.isError && (
+        {requestSignup.isError && (
           <p className="text-xs text-destructive">
-            {errorMessage(signup.error, "That username might be taken -- try another.")}
+            {errorMessage(requestSignup.error, "Something went wrong -- try again.")}
           </p>
         )}
-        <Button type="submit" size="lg" disabled={signup.isPending}>
-          {signup.isPending ? "Creating account…" : `Get started — ${formatCents(STARTING_BALANCE_CENTS)} free`}
+        <Button type="submit" size="lg" disabled={requestSignup.isPending}>
+          {requestSignup.isPending
+            ? "Sending confirmation…"
+            : `Get started — ${formatCents(STARTING_BALANCE_CENTS)} free`}
         </Button>
       </form>
 

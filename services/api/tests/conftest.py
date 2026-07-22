@@ -210,6 +210,33 @@ def email_provider() -> FakeEmailProvider:
     return FakeEmailProvider()
 
 
+def complete_signup(
+    client: TestClient,
+    email_provider: FakeEmailProvider,
+    username: str,
+    *,
+    email: str | None = None,
+) -> dict:
+    """Drives the real request -> consume round trip Phase 7's
+    verify-before-create signup requires, standing in for the one-shot
+    `POST /auth/signup` every test in this suite called directly before
+    email became mandatory. Returns the same `{"user": {...}, "cash_cents":
+    ...}` shape `/auth/signup/consume` answers with.
+
+    `email` defaults to `f"{username}@example.com"` -- fine for every
+    caller that just needs *a* verified account and doesn't care which
+    address it's under."""
+    request = client.post(
+        "/auth/signup",
+        json={"email": email or f"{username}@example.com", "username": username},
+    )
+    assert request.status_code == 202, request.text
+    token = email_provider.last_token()
+    consume = client.post("/auth/signup/consume", json={"token": token})
+    assert consume.status_code == 201, consume.text
+    return consume.json()
+
+
 @pytest.fixture
 def test_settings() -> Settings:
     """Explicit settings, independent of whatever is in the developer's
