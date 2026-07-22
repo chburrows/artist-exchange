@@ -100,7 +100,7 @@ def _find_you_portfolio(
     if my_equity is None:
         return None
 
-    rank = (
+    better_count = (
         db.scalar(
             select(func.count())
             .select_from(EquitySnapshot)
@@ -109,8 +109,9 @@ def _find_you_portfolio(
                 EquitySnapshot.equity_cents > my_equity,
             )
         )
-        + 1
+        or 0
     )
+    rank = better_count + 1
     return PortfolioLeaderboardRow(
         rank=rank, username=user.username, return_bps=_return_bps(my_equity), is_you=True
     )
@@ -200,7 +201,7 @@ def _find_you_scout(db: DbSession, latest_date: date, user: User) -> ScoutLeader
         return None
     artist_slug, artist_name, entry_price_cents, return_bps = my_row
 
-    rank = (
+    better_count = (
         db.scalar(
             select(func.count())
             .select_from(LeaderboardScout)
@@ -209,8 +210,9 @@ def _find_you_scout(db: DbSession, latest_date: date, user: User) -> ScoutLeader
                 LeaderboardScout.return_bps > return_bps,
             )
         )
-        + 1
+        or 0
     )
+    rank = better_count + 1
     return ScoutLeaderboardRow(
         rank=rank,
         username=user.username,
