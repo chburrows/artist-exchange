@@ -39,16 +39,17 @@ uv run ax backtest            # replay a metrics CSV through the real index pipe
 uv run ax backtest --artist breakout  # filter to one artist's full series
 uv run ax recompute           # run the index recompute + reversion job locally
 uv run ax reconcile           # rebuild balance_cache/position_cache from the ledger locally
+uv run ax leaderboard         # snapshot equity + refresh the Talent Scout ranking locally
 
-# Not built yet — they arrive with the phase that needs them. A stub that
-# prints "not implemented" would be worse than an honest absence.
-uv run ax reset               # Phase 5
-uv run ax fake-history --days 120 --seed 42   # Phase 5
-uv run ax simulate-trades --users 50 --days 120  # Phase 5
+uv run ax fake-history --days 120 --seed 42   # synthetic metric_snapshots + real recompute replay
+uv run ax simulate-trades --users 50 --days 120  # random agents through the real AMM/ledger
+uv run ax reset                                  # drop + migrate + seed + the two above, in one command
 
+uv run uvicorn ax.api.main:app --reload --port 8000  # FastAPI dev server
 pnpm dev                      # Next.js dev server
 pnpm build                    # static export
-pnpm e2e                      # Playwright
+pnpm e2e                      # Playwright — resets the DB via `ax reset`, then drives a real browser
+                               # against a real API + Postgres (apps/web/playwright.config.ts)
 ```
 
 No `psql` on the host — use `docker compose exec postgres psql -U postgres artist_exchange`.
@@ -63,9 +64,9 @@ services/api/src/ax/
   core/                   PURE math: config, money, amm, index, ledger
   db/                     SQLAlchemy models + session
   api/routers/            HTTP layer
-  jobs/                   snapshot, recompute, reconcile
+  jobs/                   snapshot, recompute, reconcile, leaderboard — the nightly pipeline, in order
   providers/              external data sources behind a shared protocol
-  cli.py                  seed / fake-history / simulate-trades / reset / backtest
+  cli.py                  seed / fake-history / simulate-trades / reset / backtest / leaderboard
 ```
 
 ## Non-negotiable rules
@@ -92,6 +93,7 @@ These are rules, not preferences. Violating one is a bug even if tests pass.
 - **`ax fake-history` is dev-only.** It must never be run against production or surfaced as real data.
 - **Lock order for anything touching money is fixed: the user's `balance_cache` row, then the artist row — never the reverse.** A trade needs both (cash for the overdraft check, the artist row for supply/price). Locking the artist row alone leaves the overdraft check racy: a user trading two *different* artists concurrently could have both requests read the same pre-trade cash and jointly overdraw the account. `balance_cache` first closes this without risking deadlock, because the only way either lock is shared between two concurrent trades is along its own axis (two users never share a `balance_cache` row; one user trading two artists never shares an artist row). Any new code path that locks both must follow this same order.
 - **Talent Scout depends on denormalized columns.** `transactions.index_score_at_trade` and `fair_value_cents_at_trade` are written at trade time and are immutable history — recomputing them later from snapshots would be both slow and wrong.
+- **`leaderboard_scout` is rebuilt from scratch every night (delete-all, then insert), never upserted.** It ranks *current* state, not history — a sold position must disappear, not linger with a stale row. `equity_snapshots`, by contrast, is a genuine append-only time series. Don't blur these two shapes together.
 - **Right of publicity**: every artist page carries a "not affiliated with or endorsed by" disclaimer, and v1 uses generated geometric avatars, not artist photography.
 - **Last.fm reports "artist not found" as HTTP 200** with `{"error": 6}` in the body. Always parse the body before trusting the status code, or the job records garbage as a real observation.
 - **Column types come from `type_annotation_map` in `db/base.py`, not per-column annotations.** `Mapped[datetime | None]` silently ignores an `Annotated` alias, which once produced seven naive timestamp columns including the glide window. Add schema-wide type defaults there, never a per-column alias you have to remember.

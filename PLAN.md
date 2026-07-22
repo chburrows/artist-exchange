@@ -1,12 +1,12 @@
 # Artist Exchange — v1 Build Plan
 
+**Status: v1 complete.** All six phases below have shipped — universe, index, AMM pricing, trading, the SPA, auth, and leaderboards/discovery all work end to end against a real database, and `pnpm e2e` exercises the full signup → trade → portfolio → leaderboard path in a real browser. What follows is the build record: why the system is shaped the way it is, and what to know before changing it. Not yet done: the Phase 6 Railway deploy (see that phase's "As built") and the small product gaps each phase's own notes flag.
+
 ## Context
 
-`/home/cameron/artist-exchange` is an empty repo (zero commits) containing only `CONCEPT.md`, `temp-instructions.md`, and `secrets.env`. The concept: a play-money market where users buy and sell "shares" of musical artists, where price is anchored to a real popularity index derived from public data. The goal is a product that reaches real users fast, then iterates — with good enough bones to become a business.
+The concept: a play-money market where users buy and sell "shares" of musical artists, where price is anchored to a real popularity index derived from public data. Two things shaped the build order most:
 
-This plan turns the concept into a phased build. Two things shaped it most:
-
-1. **A hard data dependency.** Week-over-week growth cannot be computed until weeks of snapshots exist, and Last.fm exposes no history. So the snapshotter ships to production *first*, before any UI, and accumulates real history while everything else is built.
+1. **A hard data dependency.** Week-over-week growth cannot be computed until weeks of snapshots exist, and Last.fm exposes no history. So the snapshotter shipped to production *first*, before any UI, and accumulated real history while everything else was built.
 2. **An economic flaw that had to be designed around.** A deterministic nightly reversion toward a publicly computable fair value creates a risk-free arbitrage: buy the biggest discount, sell the biggest premium, never evaluate an artist. That would let players win at a talent-scouting game without scouting talent. Fees, partial reversion, slippage limits, and position caps exist specifically to make that strategy unprofitable.
 
 ### Decisions locked with the user
@@ -21,10 +21,7 @@ This plan turns the concept into a phased build. Two things shaped it most:
 | Jobs | GitHub Actions cron → POST protected `/internal/jobs/snapshot`, idempotent |
 | Auth | Self-built: claim-a-username → session cookie, optional email + magic link |
 
-### Environment (verified, not assumed)
-
-Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
-**Gaps to close in Phase 0:** `uv` not installed; system Python is 3.10 but we target 3.12 to match the container. No `psql` on host — use `docker compose exec`.
+Environment/prerequisite setup lives in `SETUP.md`, kept current rather than duplicated here.
 
 ---
 
@@ -33,14 +30,14 @@ Docker 2.28 + daemon running · Node 20.20 · pnpm 10.33 · gh CLI present.
 - [x] **Phase 0** — Hygiene, project docs, CI skeleton
 - [x] **Phase 1** — Schema, snapshotter — *deployed to Railway 2026-07-19; unattended cron confirmed 2026-07-19 (schedule-trigger run, 200/200 artists, 400 rows upserted, `max(fetched_at)` 09:01 UTC verified in prod DB)*
 - [x] **Phase 2** — Pure core + invariant tests — *I1–I11, I13–I15 green (I12 already covered by Phase 1); 99.65% coverage on `ax.core`; `ax backtest` replays the committed fixture; `TRADE_FEE_BPS` retuned 75→100 bps after the I14 sim (see "As built" below)*
-- [x] **Phase 3** — Index + reversion on real data — *`jobs/recompute.py` + `/internal/jobs/recompute` + `ax recompute`, appended to the nightly Action after `snapshot`; oracle-manipulation quarantine (ratio-divergence + percentile-move, both human-cleared) implemented and covered by 17 new integration tests against real Postgres; 150 tests green, 99.67% coverage on `ax.core`. **Not yet verified against real accumulated data** — Railway deploy and this Phase 3 work landed the same UTC day, so production has one day of `metric_snapshots`, not the weeks `MIN_SNAPSHOTS_TO_LIST`/real-volatility verification needs (see "As built" below)*
+- [x] **Phase 3** — Index + reversion on real data — *`jobs/recompute.py` + `/internal/jobs/recompute` + `ax recompute`, appended to the nightly Action after `snapshot`; oracle-manipulation quarantine (ratio-divergence + percentile-move, both human-cleared) implemented and covered by 17 new integration tests against real Postgres; 150 tests green, 99.67% coverage on `ax.core`. **Not yet verified against real accumulated data** as of this writing — see "As built" below*
 - [x] **Phase 4** — Auth, trading, portfolio API — *claim-a-username + session cookie + magic-link recovery (Resend), `POST /trades/quote`+`POST /trades` under a fixed `balance_cache`-then-artist `FOR UPDATE` lock order, `GET /artists`/`{slug}`/`{slug}/history`, `GET /portfolio`, `jobs/reconcile.py` rebuilding both caches from the ledger nightly; `jobs/recompute.py` retrofitted with the same artist-row lock. 212 tests green, 99.68% coverage on `ax.core`; local smoke test against the real dev DB confirmed a ~2% fee-driven round-trip loss (see "As built" below)*
-- [ ] **Phase 5** — The SPA
-- [ ] **Phase 6** — Leaderboards, discovery, polish
+- [x] **Phase 5** — The SPA — *Next.js static export, TanStack Query, generated client; artist list/detail with the signature dual-line chart, trade ticket, portfolio, plus an admin quarantine review-queue UI pulled forward from Phase 3's own follow-up note. This phase's literal "Done when" (a friend trades unattended) has no recorded human test; Phase 6's Playwright suite now exercises the same signup → trade → see-it-in-your-portfolio path automatically on every run instead (see "As built" below)*
+- [x] **Phase 6** — Leaderboards, discovery, polish — *`jobs/leaderboard.py` (nightly `equity_snapshots` + full-rebuild `leaderboard_scout`) + `/internal/jobs/leaderboard` + `ax leaderboard`; `GET /leaderboard/{portfolio,scout}` and `GET /portfolio/history`; every Phase 5 mock placeholder replaced with the real field or endpoint it named; canvas-drawn shareable portfolio card; 4 Playwright specs green against a real API + Postgres. 244 tests green, 99.68% coverage on `ax.core` (see "As built" below)*
 
 ---
 
-## Phase 0 — Hygiene, project docs, CI skeleton (~half day)
+## Phase 0 — Hygiene, project docs, CI skeleton
 
 - [x] `.gitignore` committed first, alone
 - [x] `PLAN.md`, `CLAUDE.md`, `SETUP.md`
@@ -85,7 +82,7 @@ Install `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`) and let it mana
 
 ---
 
-## Phase 1 — Schema, snapshotter, deployed ← critical path (~2–3 days)
+## Phase 1 — Schema, snapshotter, deployed ← critical path
 
 Everything downstream depends on data that only accumulates in wall-clock time. Ship this to production in week one.
 
@@ -123,24 +120,15 @@ Three things were wrong in a way that only surfaces at deploy time, all now fixe
 
 A 502 on `/health` is a routing problem, never a database one: the endpoint answers 200 with a completely unreachable `DATABASE_URL`. Check the port before anything else.
 
-### Confirming the cron
+### Confirming the cron (how, if you ever need to re-verify)
 
-The nightly Action fires at **07:00 UTC**. Because `as_of_date` is the UTC date at fire time, a manual run earlier on the same UTC day means the scheduled run **upserts that same date** rather than adding one — the row count stays flat, which is idempotency working, not a failure.
+The nightly Action fires at **07:00 UTC**. Because `as_of_date` is the UTC date at fire time, a manual run earlier the same UTC day makes the scheduled run **upsert that date** rather than add one — a flat row count is idempotency working, not a failure. The real check is `gh run list --workflow=nightly-snapshot.yml` showing a `schedule`-triggered (not `workflow_dispatch`) run, with `max(fetched_at)` **at or after** 07:00 UTC — GitHub delays scheduled workflows under load, so a few hours late is normal; only a missing run for a whole UTC day is a real gap.
 
-So the check is *not* "row count doubled". It is:
-
-1. `gh run list --workflow=nightly-snapshot.yml` shows a run whose trigger is `schedule`, not `workflow_dispatch`.
-2. `SELECT as_of_date, count(*), max(fetched_at) ... GROUP BY as_of_date` shows `max(fetched_at)` at or after 07:00 UTC.
-
-"At or after", not "at": GitHub delays scheduled workflows under load — on-the-hour crons are the most congested slots, and hours-late (or occasionally dropped) runs are documented behavior. A late `fetched_at` is normal; only a missing run for a whole UTC day is a real gap.
-
-A genuinely new `as_of_date` appears only after a UTC day with no manual run — for this deploy, the *second* night.
-
-**Confirmed 2026-07-19**: schedule-trigger run fired 09:01 UTC (2h GitHub delay), succeeded on attempt 1 — 200/200 artists, 400 rows upserted, zero not-found/failed; `max(fetched_at)` 09:01 UTC verified in the production DB.
+**Confirmed 2026-07-19**: schedule-trigger run fired 09:01 UTC (2h GitHub delay), succeeded on attempt 1 — 200/200 artists, 400 rows upserted, zero not-found/failed.
 
 ---
 
-## Phase 2 — The pure core and its tests (~2–3 days)
+## Phase 2 — The pure core and its tests
 
 `services/api/src/ax/core/{config,money,amm,index,ledger}.py`. No SQLAlchemy, no FastAPI, no I/O, no `datetime.now()` — time is always a parameter. Purity is enforced mechanically by `tests/test_core_purity.py`, which walks the ASTs and asserts no import outside stdlib. That test is the cheapest guard against the core rotting into DB-coupled mess.
 
@@ -298,7 +286,7 @@ Decisions and surprises worth carrying forward:
 
 ---
 
-## Phase 3 — Index + reversion on real data (~1–2 days)
+## Phase 3 — Index + reversion on real data
 
 `jobs/recompute.py`: read `metric_snapshots` → compute the cross-sectional index → write `index_snapshots` and `price_history` → set each artist's glide window. Appended to the nightly Action, after the snapshot step.
 
@@ -346,7 +334,7 @@ Decisions and surprises worth carrying forward:
 
 ---
 
-## Phase 4 — Auth, trading, portfolio API (~3–4 days)
+## Phase 4 — Auth, trading, portfolio API
 
 Claim-a-username → session cookie → `STARTING_BALANCE_CENTS` `GRANT` ledger row, all in one DB transaction. Optional email attach + magic link recovery.
 
@@ -422,7 +410,7 @@ A signup → email-attach → check-inbox → consume round trip against the dep
 
 ---
 
-## Phase 5 — The SPA (~4–5 days)
+## Phase 5 — The SPA
 
 Next.js static export (`output: 'export'`), TanStack Query, TypeScript client generated from the FastAPI OpenAPI schema. Artist list with tier filter; artist page with **the signature dual-line chart (market price solid, index fair value dashed)** plus the per-artist "not affiliated with or endorsed by" disclaimer; trade ticket with live quote and slippage warning; portfolio page.
 
@@ -430,13 +418,46 @@ Next.js static export (`output: 'export'`), TanStack Query, TypeScript client ge
 
 **Done when:** a friend can sign up and trade in a browser.
 
+### As built
+
+Tailwind v4 + a small curated shadcn set (button, dialog, input, label, tabs — not the full component library), a deliberate stack decision over hand-rolled CSS. `apps/web/src/`: `app/{,artist,discover,leaderboard,portfolio,admin,auth/verify}/page.tsx`; `components/{AppShell,ArtistAvatar,ArtistCard,HoldingRow,OnboardingScreen,PortfolioValueChart,PriceChart,SignInPanel,TradeTicket}.tsx`; `lib/{api,queries,format,avatar,constants,errors,theme-context}.ts`, `api.ts` generated from the FastAPI OpenAPI schema per CLAUDE.md's rule against hand-editing it.
+
+Also landed in this phase, ahead of its own PLAN.md placement: `cli.py`'s dev-speed unlocks (`ax fake-history`, `ax simulate-trades`, `ax reset` — see "Local dev and faking history" below), an admin quarantine review-queue UI (`app/admin/`, `api/routers/admin.py`) fulfilling Phase 3's own "surface `flagged_artists` in an admin view" follow-up note, and a portfolio performance chart with a range selector.
+
+This session did not build Phase 5, so there is no first-hand "decisions and surprises" account here the way every other phase has — see `git log` for the real build history (`3f46a00`, `29ee79f`, and the UI-polish commits before Phase 6). **This phase's literal "Done when" was never satisfied by a recorded human test.** What stands in for it: Phase 6's Playwright suite drives a real browser through claim-username → buy → see-the-position-in-your-portfolio against a real API and Postgres, verified green multiple times in a row — a stronger, repeatable guarantee than a one-time manual click-through, if not literally the same check.
+
 ---
 
-## Phase 6 — Leaderboards, discovery, polish (~2–3 days)
+## Phase 6 — Leaderboards, discovery, polish
 
 Portfolio % return and Talent Scout leaderboards, as a materialized view refreshed by the nightly job — leaderboards are the one place staleness is genuinely fine. Discovery feeds ("Fastest growing under $10", "Biggest movers", "New listings"). Playwright E2E. Shareable portfolio card.
 
 Talent Scout works because `transactions` denormalizes `index_score_at_trade` and `fair_value_cents_at_trade` at write time. Those values are immutable history — recomputing them later from snapshots would be both slow and wrong.
+
+**Done when (Verification section, P6):** `pnpm e2e` green; leaderboards populate from `ax simulate-trades` data.
+
+### As built
+
+`jobs/leaderboard.py` + `POST /internal/jobs/leaderboard` + `ax leaderboard`, appended as the fourth nightly step after `reconcile`. Writes two new tables (migration `e3a622ae9505`):
+
+- **`equity_snapshots`** — real append-only daily equity per user (PK `(user_id, as_of_date)`, upserted per night). Backs `GET /portfolio/history` (the Portfolio page's real range-selector chart) and the portfolio-return leaderboard, which ranks its latest date.
+- **`leaderboard_scout`** — Talent Scout ranking, PK just `user_id`. **Fully rebuilt every run (delete-all, then insert), never upserted** — it reflects *current* state, so a sold position must disappear rather than linger, the same lesson `flagged_artists`' pre-fix unbounded accumulation already taught. Ranks each user by their single best currently-held scout-qualified position's return (`(spot_price_cents − avg_cost_cents) / avg_cost_cents` off `position_cache.avg_cost_microcents`'s blended cost, not an aggregate across every scout share) — confirmed with the user, matching the "Found an artist at $0.31" single-highlight framing the Phase 5 mock leaderboard already used.
+
+`GET /leaderboard/{portfolio,scout}` are public but personalize via a new `get_current_user_optional` dependency, returning the caller's own rank (`you`) even outside the top 25. Every Phase 5 mock placeholder is now wired to something real: `daily_change_pct` (new `db/market.py::price_history_near`, with the same since-inception fallback the artist page already used), the portfolio page's live best-scout-find computation, and both leaderboard endpoints — `mock-discovery.ts` is deleted. Discovery's movers/growth/new-listings feeds needed no new endpoint; they already sliced client-side, just against a fake field.
+
+**The shareable portfolio card** (`ShareCardDialog.tsx`) draws username/equity/return/holdings onto an offscreen `<canvas>` and offers `navigator.share({files})` on mobile with a plain download fallback on desktop — confirmed with the user ("prioritize shareability from mobile"), no image-generation dependency.
+
+**`ConsoleEmailProvider`** (`providers/email.py`, `EMAIL_PROVIDER=console`, refused whenever `is_production`) writes magic-link sends to a JSON-lines file instead of calling Resend — how the Playwright magic-link spec gets a real token with no inbox, and incidentally fixes the local-dev annoyance Phase 4's notes already flagged. That spec attaches its test email via a direct `POST /auth/email` call rather than through the UI, because **there is no "attach an email" UI yet** — Phase 5 built `SignInPanel` for recovering an already-attached address but never a screen for attaching one. Flagged as a real, small product gap, not silently worked around.
+
+**Playwright E2E** — the four specs PLAN.md's testing-strategy section names (`apps/web/e2e/`, `playwright.config.ts`). `pnpm e2e` is `node e2e/prepare-db.mjs && playwright test`: the DB reset (`ax reset --users 5 --days 12`) runs *before* Playwright starts, not inside its `globalSetup` hook, since `ax reset` does `DROP SCHEMA public CASCADE` and that hook's ordering relative to `webServer` startup isn't a contract worth relying on. `webServer` starts both the real API and Next dev server, reusing an already-running local pair outside CI. CI's `web` job gained a Postgres service container, `uv`, and `playwright install --with-deps chromium`.
+
+Notes worth carrying forward:
+
+- `ax simulate-trades`/`ax reset` now also snapshot the leaderboard once per simulated day (backdated labels only, same fabrication category as the rest of `ax reset`) — otherwise a fresh dev DB would have empty leaderboards until real nights passed.
+- Two Playwright gotchas hit during setup, both fixed and worth remembering for future specs: a `maxLength={24}` username input silently truncating a generated test username, and `getByLabel("Email")` matching a dialog's own accessible name ambiguously (fix: `{ exact: true }`) — plus a page-wide `svg path` count assertion picking up Next's dev-overlay icon until scoped to `main`.
+- **Not yet deployed to Railway.** No new variables needed (`EMAIL_PROVIDER` defaults `"resend"`; production refuses `"console"` outright) — just the deploy itself and confirming the new fourth nightly step fires unattended.
+- **Unresolved discrepancy, not silently dropped:** Phase 2's `components` section still says "Phase 6's audit trail reads it too," anticipating a UI over `index_snapshots.components` that this phase's own scope never named and that wasn't built. Build it later or strike the reference.
+- **Test coverage:** 244 tests green (18 new), 99.68% coverage on `ax.core`. All 4 Playwright specs green against a real API + Postgres, run three times to check for flakiness.
 
 ---
 
@@ -480,9 +501,19 @@ balance_cache(user_id PK, cash_cents, updated_at)
 flagged_artists(artist_id, as_of_date, reason text, detail jsonb,
                 cleared_at timestamptz null, cleared_by text null,
                 PK (artist_id, as_of_date))
+
+-- nightly leaderboard snapshot (Phase 6) -- append-only time series,
+-- unlike flagged_artists above; see that phase's "As built" for why
+equity_snapshots(user_id, as_of_date, equity_cents bigint, cash_cents bigint,
+                 created_at, PK (user_id, as_of_date))
+
+-- Talent Scout ranking (Phase 6) -- fully rebuilt every run, PK is just
+-- user_id: this is a ranking of *current* state, not a time series
+leaderboard_scout(user_id PK, best_artist_id, entry_price_cents bigint,
+                  return_bps bigint, scout_shares, as_of_date, updated_at)
 ```
 
-Indexes: `transactions(user_id, created_at)`, `transactions(artist_id, created_at)`, `price_history(artist_id, at)`, `index_snapshots(as_of_date)`.
+Indexes: `transactions(user_id, created_at)`, `transactions(artist_id, created_at)`, `price_history(artist_id, at)`, `index_snapshots(as_of_date)`, `equity_snapshots(as_of_date)`.
 
 The `price_history` index is plain ascending, not `at DESC`: Postgres scans a btree backwards at the same cost, and an explicit `DESC` makes it an expression index that autogenerate cannot compare — reporting drift from `alembic check` on every run forever.
 
@@ -562,7 +593,7 @@ Hypothesis for I1–I7.
 - `ax seed-artists` — load the 200-artist seed.
 - `ax backtest` *(built in Phase 2)* — replay a long-format metrics CSV through the real `compute_index` pipeline, carrying EWMA state day to day; defaults to the committed fixture, `--artist` filters to one slug's full series. No DB, no network — this is `core/` exercised against a CSV instead of `metric_snapshots`.
 - `ax fake-history --days 120 --seed 42` — generate synthetic `metric_snapshots` via a GBM walk on listeners with a monotonic playcount derived from it, **so the fake data carries the same pathology as the real data** and genuinely exercises the index formula. Then run the real recompute job over each historical date in order. Deterministic under `--seed`.
-- `ax simulate-trades --users 50 --days 120` — random agents trading through the real AMM and real ledger path, producing realistic price history, populated leaderboards, non-empty portfolios.
+- `ax simulate-trades --users 50 --days 120` — random agents trading through the real AMM and real ledger path, producing realistic price history and non-empty portfolios; also runs `run_leaderboard_snapshot` once per simulated day (Phase 6), so `equity_snapshots` and both leaderboards are populated too, not just positions.
 - `ax reset` — drop, migrate, and all of the above in one command, under 30 seconds.
 
 Phase 5 UI work never waits on real history, charts have real shape from day one, and every local DB is reproducible. (I14's anti-arbitrage simulation, `services/api/tests/core/sim.py`, is a separate, self-contained seeded market generator used only by the test suite — it does not go through `ax fake-history`.)
@@ -594,10 +625,12 @@ The honest answer to cold start is still the phase ordering: Phase 1 ships in we
 - **P2** — `uv run pytest` green, coverage ≥90% on `core/`. Run `ax backtest` and eyeball the index series for plausibility — do known-growing artists actually score higher?
 - **P3** — Query `index_snapshots` for real dates; plot fair value for a few artists and sanity-check direction against what you know about those artists. **Confirm some artists' fair values went DOWN** — that's the real-world I8 check.
 - **P4** — Run the signup → buy → portfolio → sell script; verify the round trip loses ~2% (`TRADE_FEE_BPS = 100` each leg, retuned in Phase 2) and `SELECT * FROM v_balances` matches `balance_cache`.
-- **P5** — Use `/run` to launch the app and click through it; then have one real friend sign up and trade unattended, and watch where they hesitate.
-- **P6** — `pnpm e2e` green; leaderboards populate from `ax simulate-trades` data.
+- **P5** — Use `/run` to launch the app and click through it; then have one real friend sign up and trade unattended, and watch where they hesitate. *No human friend test is recorded; Phase 6's Playwright suite covers the same core path automatically instead — see that phase's "As built."*
+- **P6** — `pnpm e2e` green; leaderboards populate from `ax simulate-trades` data. **Done.**
 
 **Ongoing, before each commit:** `/verify` for behavior, `/code-review` on the diff. Commit at every phase boundary.
+
+**Still open, not blocking v1 as shipped:** a real friend hasn't clicked through the app (P5); Phase 3's real-volatility check needs more accumulated nights of production data than exist yet; Phase 6 isn't deployed to Railway. None of these are code gaps — see each phase's own "As built" for what's actually left.
 
 ---
 
