@@ -133,9 +133,23 @@ class PendingSignup(Base):
     request time, or supplied again at consume time) — collisions on that
     path are a 409 for the caller to resolve, never silently retried
     (`api/routers/auth.py`).
+
+    The "at most one live row per email" invariant is enforced here, not
+    just in `request_signup`: a partial unique index on `email` scoped to
+    `consumed_at IS NULL` lets Postgres itself reject a second concurrent
+    insert for the same address rather than relying on an unlocked
+    delete-then-insert to not race.
     """
 
     __tablename__ = "pending_signups"
+    __table_args__ = (
+        Index(
+            "uq_pending_signups_email_live",
+            "email",
+            unique=True,
+            postgresql_where=text("consumed_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(CITEXT, index=True)

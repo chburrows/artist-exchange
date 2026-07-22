@@ -35,7 +35,8 @@ from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Cookie, HTTPException, Response, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, select
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
 from ax.api.deps import (
@@ -65,9 +66,10 @@ _USERNAME_PATTERN = r"^[A-Za-z0-9_-]{3,24}$"
 # the email provider. The link itself is the real verification.
 _EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
-# `random_username()`'s collision odds are low (20 * 20 * 100 candidates)
-# but not zero, and a caller-supplied name never retries at all -- see
-# `consume_signup`.
+# Size of the candidate batch `_pick_username` generates and checks in one
+# query. `random_username()`'s collision odds are low (20 * 20 * 100
+# candidates) but not zero, and a caller-supplied name isn't batched at all
+# -- see `consume_signup`.
 _MAX_USERNAME_GENERATION_ATTEMPTS = 5
 
 
@@ -208,6 +210,61 @@ def _send_link(
         ) from exc
 
 
+def _issue_magic_link(
+    db: DbDep,
+    settings: SettingsDep,
+    session_secret: SessionSecretDep,
+    email_provider: EmailProviderDep,
+    user: User,
+    now: datetime,
+) -> None:
+    """Shared by `request_signup`'s existing-user branch and
+    `request_magic_link` -- both are "send this already-known user a
+    sign-in link", just reached from different callers."""
+    raw_token = secrets.token_urlsafe(32)
+    db.add(
+        MagicLink(
+            user_id=user.id,
+            email=user.email,
+            token_hash=hash_token(session_secret, raw_token),
+            expires_at=magic_link_expiry(now),
+        )
+    )
+    db.commit()
+    _send_link(
+        email_provider,
+        settings,
+        user.email,
+        "Your Artist Exchange sign-in link",
+        "auth/verify",
+        raw_token,
+    )
+
+
+def _constraint_name(exc: IntegrityError) -> str | None:
+    """`users` has two unique constraints (`username`, `email`) -- a bare
+    `IntegrityError` doesn't say which fired, but psycopg's `diag` does,
+    via the constraint names `NAMING_CONVENTION` (`db/base.py`) assigns:
+    `uq_users_username` / `uq_users_email`."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None) if diag is not None else None
+
+
+def _pick_username(db: DbDep) -> str:
+    """A batch of generated candidates, filtered against `users` in one
+    query -- cheaper than the old flush-per-guess loop, and avoids
+    treating every retry as a database round trip. The tiny remaining
+    race (another request takes the same candidate between this SELECT
+    and the caller's INSERT) is left to that INSERT's own uniqueness
+    check rather than guarded against here."""
+    candidates = [random_username() for _ in range(_MAX_USERNAME_GENERATION_ATTEMPTS)]
+    taken = set(db.scalars(select(User.username).where(User.username.in_(candidates))))
+    for candidate in candidates:
+        if candidate not in taken:
+            return candidate
+    return candidates[-1]
+
+
 @router.post("/signup", status_code=status.HTTP_202_ACCEPTED)
 def request_signup(
     body: SignupRequest,
@@ -227,44 +284,33 @@ def request_signup(
         # A verified account already owns this address -- this is a
         # login, not a signup. No second pending signup is created for
         # an address that will never consume one.
-        raw_token = secrets.token_urlsafe(32)
-        db.add(
-            MagicLink(
-                user_id=existing_user.id,
-                email=existing_user.email,
-                token_hash=hash_token(session_secret, raw_token),
-                expires_at=magic_link_expiry(now),
-            )
-        )
-        db.commit()
-        _send_link(
-            email_provider,
-            settings,
-            body.email,
-            "Your Artist Exchange sign-in link",
-            "auth/verify",
-            raw_token,
-        )
+        _issue_magic_link(db, settings, session_secret, email_provider, existing_user, now)
         return DetailResponse(detail="check your email to continue")
 
     # At most one live pending signup per address -- an abandoned earlier
     # request must not linger once a second one comes in for the same
-    # email, or "which token is current" becomes ambiguous.
-    db.execute(
-        delete(PendingSignup).where(
-            PendingSignup.email == body.email, PendingSignup.consumed_at.is_(None)
-        )
-    )
-
+    # email, or "which token is current" becomes ambiguous. A single
+    # `INSERT ... ON CONFLICT` against the `uq_pending_signups_email_live`
+    # partial unique index (see `PendingSignup`) makes this atomic: two
+    # concurrent requests for the same address can no longer both insert
+    # a live row, which a separate delete-then-insert couldn't guarantee.
     raw_token = secrets.token_urlsafe(32)
-    db.add(
-        PendingSignup(
-            email=body.email,
-            requested_username=body.username,
-            token_hash=hash_token(session_secret, raw_token),
-            expires_at=pending_signup_expiry(now),
-        )
+    stmt = pg_insert(PendingSignup).values(
+        email=body.email,
+        requested_username=body.username,
+        token_hash=hash_token(session_secret, raw_token),
+        expires_at=pending_signup_expiry(now),
     )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[PendingSignup.email],
+        index_where=PendingSignup.consumed_at.is_(None),
+        set_={
+            "requested_username": stmt.excluded.requested_username,
+            "token_hash": stmt.excluded.token_hash,
+            "expires_at": stmt.excluded.expires_at,
+        },
+    )
+    db.execute(stmt)
     db.commit()
 
     _send_link(
@@ -292,10 +338,11 @@ def consume_signup(
 
     Username collision handling has one rule: a value nobody chose (this
     request omitted `username` *and* the original request did too) is
-    the server's problem, retried in-process with a fresh generated
-    candidate; a value somebody chose -- typed at request time, or
-    supplied again here -- is a 409 for the caller to resolve, and
-    `consumed_at` is deliberately left unset so the token (proof of inbox
+    the server's problem -- `_pick_username` pre-filters a batch of
+    generated candidates against `users` so a real collision is rare;
+    a value somebody chose -- typed at request time, or supplied again
+    here -- is a 409 for the caller to resolve. Either way `consumed_at`
+    is deliberately left unset on a 409 so the token (proof of inbox
     ownership) is still good for a retry against a different username.
     """
     now = datetime.now(UTC)
@@ -317,26 +364,25 @@ def consume_signup(
     elif pending.requested_username is not None:
         candidate, server_generated = pending.requested_username, False
     else:
-        candidate, server_generated = random_username(), True
+        candidate, server_generated = _pick_username(db), True
 
-    attempts = _MAX_USERNAME_GENERATION_ATTEMPTS if server_generated else 1
-    user = None
-    for attempt in range(attempts):
-        user = User(username=candidate, email=pending.email)
-        db.add(user)
-        try:
-            db.flush()
-            break
-        except IntegrityError:
-            db.rollback()
-            user = None
-            if not server_generated or attempt == attempts - 1:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT, detail="username already taken"
-                ) from None
-            candidate = random_username()
-
-    assert user is not None, "loop above always breaks with a user or raises"
+    user = User(username=candidate, email=pending.email)
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if _constraint_name(exc) != "uq_users_username":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="an account for this email already exists",
+            ) from None
+        detail = (
+            "could not generate a unique username, try again"
+            if server_generated
+            else "username already taken"
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from None
 
     pending.consumed_at = now
     balance = lock_balance_cache(db, user.id)
@@ -418,25 +464,7 @@ def request_magic_link(
     addresses have accounts."""
     user = db.scalars(select(User).where(User.email == body.email)).one_or_none()
     if user is not None:
-        now = datetime.now(UTC)
-        raw_token = secrets.token_urlsafe(32)
-        db.add(
-            MagicLink(
-                user_id=user.id,
-                email=user.email,
-                token_hash=hash_token(session_secret, raw_token),
-                expires_at=magic_link_expiry(now),
-            )
-        )
-        db.commit()
-        _send_link(
-            email_provider,
-            settings,
-            body.email,
-            "Your Artist Exchange sign-in link",
-            "auth/verify",
-            raw_token,
-        )
+        _issue_magic_link(db, settings, session_secret, email_provider, user, datetime.now(UTC))
 
     return DetailResponse(detail="if that email is registered, a link was sent")
 

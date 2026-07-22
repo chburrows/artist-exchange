@@ -5,13 +5,18 @@ so they're exercised at the HTTP layer rather than just unit-tested
 against the pure helpers.
 """
 
+import secrets
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ax.core.auth import hash_token, pending_signup_expiry
 from ax.core.config import STARTING_BALANCE_CENTS
 from ax.db.models import BalanceCache, PendingSignup, Transaction, User
+from ax.settings import Settings
 from tests.conftest import FakeEmailProvider, complete_signup
 
 
@@ -148,6 +153,76 @@ def test_a_second_signup_request_for_the_same_email_invalidates_the_first_token(
 
     consume_stale = client.post("/auth/signup/consume", json={"token": first_token})
     assert consume_stale.status_code == 400
+
+
+def test_concurrent_signup_requests_for_the_same_email_cannot_both_stay_live(
+    session: Session, test_settings: Settings
+) -> None:
+    """The DB-level counterpart to
+    `test_a_second_signup_request_for_the_same_email_invalidates_the_first_token`:
+    even bypassing the app's own delete-then-insert (inserting a second
+    live row directly, as a true concurrent request would), the partial
+    unique index on `pending_signups.email` (scoped to `consumed_at IS
+    NULL`) rejects it outright rather than silently allowing two live
+    tokens for one address."""
+    now = datetime.now(UTC)
+    secret = test_settings.session_secret.encode("utf-8")
+    session.add(
+        PendingSignup(
+            email="racer@example.com",
+            requested_username="racer-one",
+            token_hash=hash_token(secret, secrets.token_urlsafe(32)),
+            expires_at=pending_signup_expiry(now),
+        )
+    )
+    session.commit()
+
+    session.add(
+        PendingSignup(
+            email="racer@example.com",
+            requested_username="racer-two",
+            token_hash=hash_token(secret, secrets.token_urlsafe(32)),
+            expires_at=pending_signup_expiry(now),
+        )
+    )
+    try:
+        session.flush()
+        raised = False
+    except IntegrityError:
+        raised = True
+    finally:
+        session.rollback()
+    assert raised
+
+
+def test_consume_email_collision_is_not_misreported_as_username_taken(
+    client: TestClient, session: Session, test_settings: Settings
+) -> None:
+    """A `users.email` uniqueness violation at consume time (the shape a
+    genuine request-time race would produce, before the partial unique
+    index above closed off the app-level path that used to create it)
+    must not be reported as "username already taken" -- the caller would
+    retry with a new username forever and never fix the real problem."""
+    now = datetime.now(UTC)
+    session.add(User(username="race-winner", email="race@example.com"))
+    session.flush()
+
+    raw_token = secrets.token_urlsafe(32)
+    session.add(
+        PendingSignup(
+            email="race@example.com",
+            requested_username="race-loser",
+            token_hash=hash_token(test_settings.session_secret.encode("utf-8"), raw_token),
+            expires_at=pending_signup_expiry(now),
+        )
+    )
+    session.commit()
+
+    response = client.post(
+        "/auth/signup/consume", json={"token": raw_token, "username": "someone-new"}
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "an account for this email already exists"
 
 
 def test_users_email_not_null_is_a_db_backstop(session: Session) -> None:
