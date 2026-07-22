@@ -87,7 +87,7 @@ export default function PortfolioPage() {
   const rangePositive = rangeChangePct >= 0;
   const rangeHigh = hasEnoughHistory ? Math.max(...rangeSlice.map((p) => p.valueCents)) : 0;
   const rangeLow = hasEnoughHistory ? Math.min(...rangeSlice.map((p) => p.valueCents)) : 0;
-  const avgDailyPct = hasEnoughHistory ? rangeChangePct / rangeSlice.length : 0;
+  const avgDailyPct = hasEnoughHistory ? rangeChangePct / (rangeSlice.length - 1) : 0;
   const dailyReturns = rangeSlice.slice(1).map((p, i) => pctChange(rangeSlice[i].valueCents, p.valueCents));
   const volatilityPct = Math.sqrt(
     dailyReturns.reduce((sum, r) => sum + r * r, 0) / Math.max(dailyReturns.length, 1),

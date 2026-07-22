@@ -10,9 +10,12 @@ request or forcing every visitor to be authenticated just to see who's
 winning.
 """
 
+from datetime import date
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session as DbSession
 
 from ax.api.deps import CurrentUserOptionalDep, DbDep
 from ax.core.config import STARTING_BALANCE_CENTS
@@ -50,14 +53,19 @@ def get_portfolio_leaderboard(
         # fabricated ranking (CLAUDE.md: an absence beats a stub).
         return PortfolioLeaderboardResponse(as_of_date=None, rows=[], you=None)
 
-    stmt = (
+    # `LIMIT` in SQL, not a Python slice after the fact -- with the
+    # `(as_of_date, equity_cents)` index this reads only the top `TOP_N`
+    # rows instead of sorting and materializing every user in the table on
+    # every anonymous page load.
+    top_stmt = (
         select(User.id, User.username, EquitySnapshot.equity_cents)
         .join(EquitySnapshot, EquitySnapshot.user_id == User.id)
         .where(EquitySnapshot.as_of_date == latest_date)
         .order_by(EquitySnapshot.equity_cents.desc())
+        .limit(TOP_N)
     )
 
-    all_rows = [
+    rows = [
         PortfolioLeaderboardRow(
             rank=rank,
             username=username,
@@ -68,12 +76,43 @@ def get_portfolio_leaderboard(
             return_bps=_return_bps(equity_cents),
             is_you=user is not None and user_id == user.id,
         )
-        for rank, (user_id, username, equity_cents) in enumerate(db.execute(stmt), start=1)
+        for rank, (user_id, username, equity_cents) in enumerate(db.execute(top_stmt), start=1)
     ]
 
-    you = next((row for row in all_rows if row.is_you), None)
-    return PortfolioLeaderboardResponse(
-        as_of_date=latest_date.isoformat(), rows=all_rows[:TOP_N], you=you
+    you = next((row for row in rows if row.is_you), None)
+    if you is None and user is not None:
+        you = _find_you_portfolio(db, latest_date, user)
+
+    return PortfolioLeaderboardResponse(as_of_date=latest_date.isoformat(), rows=rows, you=you)
+
+
+def _find_you_portfolio(
+    db: DbSession, latest_date: date, user: User
+) -> PortfolioLeaderboardRow | None:
+    """The caller's own rank when it falls outside `TOP_N` -- a row lookup
+    plus a `COUNT`, not a re-run of the full ranked query, so a logged-in
+    visitor never forces a full-table scan just to see their own rank."""
+    my_equity = db.scalar(
+        select(EquitySnapshot.equity_cents).where(
+            EquitySnapshot.user_id == user.id, EquitySnapshot.as_of_date == latest_date
+        )
+    )
+    if my_equity is None:
+        return None
+
+    rank = (
+        db.scalar(
+            select(func.count())
+            .select_from(EquitySnapshot)
+            .where(
+                EquitySnapshot.as_of_date == latest_date,
+                EquitySnapshot.equity_cents > my_equity,
+            )
+        )
+        + 1
+    )
+    return PortfolioLeaderboardRow(
+        rank=rank, username=user.username, return_bps=_return_bps(my_equity), is_you=True
     )
 
 
@@ -99,7 +138,12 @@ def get_scout_leaderboard(db: DbDep, user: CurrentUserOptionalDep) -> ScoutLeade
     if latest_date is None:
         return ScoutLeaderboardResponse(as_of_date=None, rows=[], you=None)
 
-    stmt = (
+    # `as_of_date` filter kept explicit here even though the nightly job
+    # (jobs/leaderboard.py) currently guarantees every row shares one date
+    # via delete-all-then-insert -- this endpoint shouldn't rely on that
+    # invariant holding forever to avoid silently mixing two nights' rows.
+    # `LIMIT` in SQL for the same reason as the portfolio endpoint above.
+    top_stmt = (
         select(
             User.id,
             User.username,
@@ -111,10 +155,12 @@ def get_scout_leaderboard(db: DbDep, user: CurrentUserOptionalDep) -> ScoutLeade
         .select_from(LeaderboardScout)
         .join(User, User.id == LeaderboardScout.user_id)
         .join(Artist, Artist.id == LeaderboardScout.best_artist_id)
+        .where(LeaderboardScout.as_of_date == latest_date)
         .order_by(LeaderboardScout.return_bps.desc())
+        .limit(TOP_N)
     )
 
-    all_rows = [
+    rows = [
         ScoutLeaderboardRow(
             rank=rank,
             username=username,
@@ -125,11 +171,52 @@ def get_scout_leaderboard(db: DbDep, user: CurrentUserOptionalDep) -> ScoutLeade
             is_you=user is not None and user_id == user.id,
         )
         for rank, (user_id, username, artist_slug, artist_name, entry_price_cents, return_bps) in (
-            enumerate(db.execute(stmt), start=1)
+            enumerate(db.execute(top_stmt), start=1)
         )
     ]
 
-    you = next((row for row in all_rows if row.is_you), None)
-    return ScoutLeaderboardResponse(
-        as_of_date=latest_date.isoformat(), rows=all_rows[:TOP_N], you=you
+    you = next((row for row in rows if row.is_you), None)
+    if you is None and user is not None:
+        you = _find_you_scout(db, latest_date, user)
+
+    return ScoutLeaderboardResponse(as_of_date=latest_date.isoformat(), rows=rows, you=you)
+
+
+def _find_you_scout(db: DbSession, latest_date: date, user: User) -> ScoutLeaderboardRow | None:
+    """Same shape as `_find_you_portfolio` -- the caller's own scout row
+    when it falls outside `TOP_N`, without re-running the full query."""
+    my_row = db.execute(
+        select(
+            Artist.slug,
+            Artist.name,
+            LeaderboardScout.entry_price_cents,
+            LeaderboardScout.return_bps,
+        )
+        .select_from(LeaderboardScout)
+        .join(Artist, Artist.id == LeaderboardScout.best_artist_id)
+        .where(LeaderboardScout.user_id == user.id, LeaderboardScout.as_of_date == latest_date)
+    ).first()
+    if my_row is None:
+        return None
+    artist_slug, artist_name, entry_price_cents, return_bps = my_row
+
+    rank = (
+        db.scalar(
+            select(func.count())
+            .select_from(LeaderboardScout)
+            .where(
+                LeaderboardScout.as_of_date == latest_date,
+                LeaderboardScout.return_bps > return_bps,
+            )
+        )
+        + 1
+    )
+    return ScoutLeaderboardRow(
+        rank=rank,
+        username=user.username,
+        artist_slug=artist_slug,
+        artist_name=artist_name,
+        entry_price_cents=entry_price_cents,
+        return_bps=return_bps,
+        is_you=True,
     )

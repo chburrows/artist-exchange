@@ -128,6 +128,7 @@ export function ShareCardDialog({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const sorted = [...topPositions].sort((a, b) => b.market_value_cents - a.market_value_cents);
 
@@ -146,6 +147,7 @@ export function ShareCardDialog({
     const canvas = canvasRef.current;
     if (!canvas) return;
     setBusy(true);
+    setError(null);
     try {
       const blob: Blob | null = await new Promise((resolve) =>
         canvas.toBlob(resolve, "image/png"),
@@ -175,9 +177,15 @@ export function ShareCardDialog({
       a.download = "artist-exchange-portfolio.png";
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
+    } catch (err) {
       // AbortError from a user canceling the native share sheet is
-      // expected, not a failure worth surfacing.
+      // expected, not a failure worth surfacing -- everything else (denied
+      // permission, a tainted/unsupported canvas) gets real feedback
+      // instead of the button silently resetting with no explanation.
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
+      setError("Couldn't share the image. Try again, or use your browser's screenshot instead.");
     } finally {
       setBusy(false);
     }
@@ -201,6 +209,7 @@ export function ShareCardDialog({
         <Button onClick={handleShare} disabled={busy} className="mt-4 w-full">
           {busy ? "Preparing…" : "Share image"}
         </Button>
+        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       </DialogContent>
     </Dialog>
   );

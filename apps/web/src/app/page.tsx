@@ -41,7 +41,7 @@ function HomeDashboard({ username }: { username: string }) {
   // exists for this account.
   const historyPoints = history.data?.points ?? [];
   const yesterday = historyPoints[historyPoints.length - 1];
-  const hasDayChange = yesterday !== undefined && yesterday.equity_cents > 0;
+  const hasDayChange = yesterday !== undefined;
   const dayChangeCents = hasDayChange ? equityCents - yesterday.equity_cents : 0;
   const dayChangePct = hasDayChange ? pctChange(yesterday.equity_cents, equityCents) : 0;
 

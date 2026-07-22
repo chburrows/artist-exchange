@@ -502,9 +502,15 @@ def _simulate_trades(users: int, days: int, seed: int) -> None:
                     # before raising.
                     rejected += 1
 
-            run_leaderboard_snapshot(
-                session, start + timedelta(days=day_offset), now=datetime.now(UTC)
-            )
+            # A fixed hour per simulated day, same reasoning as
+            # `_fake_history`'s `recompute_now`: `compute_portfolio_snapshot`
+            # marks positions to spot via the `now`-dependent reversion
+            # glide, so passing the real wall-clock time here would mark
+            # every one of the `days` fabricated snapshots to the same
+            # glide state instead of a price appropriate to that day.
+            as_of_date = start + timedelta(days=day_offset)
+            snapshot_now = datetime.combine(as_of_date, time(7, 0), tzinfo=UTC)
+            run_leaderboard_snapshot(session, as_of_date, now=snapshot_now)
 
         typer.echo(f"trades: {succeeded} succeeded, {rejected} rejected by guardrails (expected)")
 

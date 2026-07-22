@@ -168,16 +168,18 @@ def require_session_secret(settings: SettingsDep) -> bytes:
 SessionSecretDep = Annotated[bytes, Depends(require_session_secret)]
 
 
-def get_current_user(
-    db: DbDep,
-    session_secret: SessionSecretDep,
-    ax_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
-) -> User:
-    """Resolves the session cookie to its user. 401 on anything short of a
-    live, unrevoked, unexpired session — a missing cookie and a garbage
-    one get the same response, so neither leaks which case it was."""
+def _resolve_session_user(
+    db: DbSession,
+    session_secret: bytes,
+    ax_session: str | None,
+) -> User | None:
+    """The one place session-validity rules live -- live, unrevoked,
+    unexpired. Both `get_current_user` and `get_current_user_optional`
+    call this rather than each running their own copy of the query, so a
+    future validity rule (e.g. a device-revoked check) can't be added to
+    one and forgotten in the other."""
     if not ax_session:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+        return None
 
     token_hash = hash_token(session_secret, ax_session)
     now = datetime.now(UTC)
@@ -190,7 +192,18 @@ def get_current_user(
             SessionModel.expires_at > now,
         )
     )
-    user = db.scalars(stmt).one_or_none()
+    return db.scalars(stmt).one_or_none()
+
+
+def get_current_user(
+    db: DbDep,
+    session_secret: SessionSecretDep,
+    ax_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
+) -> User:
+    """Resolves the session cookie to its user. 401 on anything short of a
+    live, unrevoked, unexpired session — a missing cookie and a garbage
+    one get the same response, so neither leaks which case it was."""
+    user = _resolve_session_user(db, session_secret, ax_session)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
     return user
@@ -209,21 +222,7 @@ def get_current_user_optional(
     leaderboards: browsable by anyone, but splice in "your" rank if
     you're logged in). A missing or garbage cookie both resolve to `None`
     here, same as they resolve to the same 401 in `get_current_user`."""
-    if not ax_session:
-        return None
-
-    token_hash = hash_token(session_secret, ax_session)
-    now = datetime.now(UTC)
-    stmt = (
-        select(User)
-        .join(SessionModel, SessionModel.user_id == User.id)
-        .where(
-            SessionModel.token_hash == token_hash,
-            SessionModel.revoked_at.is_(None),
-            SessionModel.expires_at > now,
-        )
-    )
-    return db.scalars(stmt).one_or_none()
+    return _resolve_session_user(db, session_secret, ax_session)
 
 
 CurrentUserOptionalDep = Annotated[User | None, Depends(get_current_user_optional)]

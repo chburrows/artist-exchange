@@ -351,7 +351,13 @@ class EquitySnapshot(Base):
     """
 
     __tablename__ = "equity_snapshots"
-    __table_args__ = (Index("ix_equity_snapshots_as_of_date", "as_of_date"),)
+    __table_args__ = (
+        Index("ix_equity_snapshots_as_of_date", "as_of_date"),
+        # Backs the portfolio leaderboard's `WHERE as_of_date = ... ORDER
+        # BY equity_cents DESC LIMIT` (api/routers/leaderboard.py) without
+        # a full-table sort.
+        Index("ix_equity_snapshots_as_of_date_equity_cents", "as_of_date", "equity_cents"),
+    )
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -384,6 +390,12 @@ class LeaderboardScout(Base):
     """
 
     __tablename__ = "leaderboard_scout"
+    __table_args__ = (
+        # Backs the scout leaderboard's `WHERE as_of_date = ... ORDER BY
+        # return_bps DESC LIMIT` (api/routers/leaderboard.py) without a
+        # full-table sort.
+        Index("ix_leaderboard_scout_as_of_date_return_bps", "as_of_date", "return_bps"),
+    )
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
