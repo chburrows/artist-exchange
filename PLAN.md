@@ -1,6 +1,6 @@
 # Artist Exchange — v1 Build Plan
 
-**Status: v1 complete.** All six phases below have shipped — universe, index, AMM pricing, trading, the SPA, auth, and leaderboards/discovery all work end to end against a real database, and `pnpm e2e` exercises the full signup → trade → portfolio → leaderboard path in a real browser. What follows is the build record: why the system is shaped the way it is, and what to know before changing it. Not yet done: the Phase 6 Railway deploy (see that phase's "As built") and the small product gaps each phase's own notes flag.
+**Status: backend v1 complete; frontend rebuilding.** Universe, index, AMM pricing, trading, auth, and leaderboards/discovery all work end to end against a real database. The SPA (Phase 5) shipped once, was deleted on 2026-07-23, and is being rebuilt from scratch with a new visual design — see `apps/web/ARCHITECTURE.md` for that work, not Phase 5 below. What follows is the build record for everything else: why the system is shaped the way it is, and what to know before changing it. Not yet done: the Phase 6 Railway deploy (see that phase's "As built"), the small product gaps each phase's own notes flag, and the frontend rebuild itself.
 
 ## Context
 
@@ -32,7 +32,7 @@ Environment/prerequisite setup lives in `SETUP.md`, kept current rather than dup
 - [x] **Phase 2** — Pure core + invariant tests — *I1–I11, I13–I15 green (I12 already covered by Phase 1); 99.65% coverage on `ax.core`; `ax backtest` replays the committed fixture; `TRADE_FEE_BPS` retuned 75→100 bps after the I14 sim (see "As built" below)*
 - [x] **Phase 3** — Index + reversion on real data — *`jobs/recompute.py` + `/internal/jobs/recompute` + `ax recompute`, appended to the nightly Action after `snapshot`; oracle-manipulation quarantine (ratio-divergence + percentile-move, both human-cleared) implemented and covered by 17 new integration tests against real Postgres; 150 tests green, 99.67% coverage on `ax.core`. **Not yet verified against real accumulated data** as of this writing — see "As built" below*
 - [x] **Phase 4** — Auth, trading, portfolio API — *claim-a-username + session cookie + magic-link recovery (Resend), `POST /trades/quote`+`POST /trades` under a fixed `balance_cache`-then-artist `FOR UPDATE` lock order, `GET /artists`/`{slug}`/`{slug}/history`, `GET /portfolio`, `jobs/reconcile.py` rebuilding both caches from the ledger nightly; `jobs/recompute.py` retrofitted with the same artist-row lock. 212 tests green, 99.68% coverage on `ax.core`; local smoke test against the real dev DB confirmed a ~2% fee-driven round-trip loss (see "As built" below)*
-- [x] **Phase 5** — The SPA — *Next.js static export, TanStack Query, generated client; artist list/detail with the signature dual-line chart, trade ticket, portfolio, plus an admin quarantine review-queue UI pulled forward from Phase 3's own follow-up note. This phase's literal "Done when" (a friend trades unattended) has no recorded human test; Phase 6's Playwright suite now exercises the same signup → trade → see-it-in-your-portfolio path automatically on every run instead (see "As built" below)*
+- [ ] **Phase 5** — The SPA — *shipped once, then deleted 2026-07-23 for a full rebuild with a new visual design. Build truth now lives in `apps/web/ARCHITECTURE.md`, not below — see that section*
 - [x] **Phase 6** — Leaderboards, discovery, polish — *`jobs/leaderboard.py` (nightly `equity_snapshots` + full-rebuild `leaderboard_scout`) + `/internal/jobs/leaderboard` + `ax leaderboard`; `GET /leaderboard/{portfolio,scout}` and `GET /portfolio/history`; every Phase 5 mock placeholder replaced with the real field or endpoint it named; canvas-drawn shareable portfolio card; 4 Playwright specs green against a real API + Postgres. 244 tests green, 99.68% coverage on `ax.core` (see "As built" below)*
 - [x] **Phase 7** — Required email, optional username *(post-v1)* — email mandatory at signup via a new `pending_signups` verify-before-create flow, auto-generated editable username, `PATCH /auth/username`, `POST /auth/email` removed, both consume endpoints converted `GET`→`POST`; 251 tests green, 99.68% coverage on `ax.core`; 5 Playwright specs green against a real API + Postgres. **Not yet deployed** — the Railway prod-user TRUNCATE this migration requires as a precondition needs explicit go-ahead and hasn't been run (see "As built" below)
 
@@ -411,23 +411,11 @@ A signup → email-attach → check-inbox → consume round trip against the dep
 
 ---
 
-## Phase 5 — The SPA
+## Phase 5 — The SPA *(rebuild in progress — see `apps/web/ARCHITECTURE.md`)*
 
-Next.js static export (`output: 'export'`), TanStack Query, TypeScript client generated from the FastAPI OpenAPI schema. Artist list with tier filter; artist page with **the signature dual-line chart (market price solid, index fair value dashed)** plus the per-artist "not affiliated with or endorsed by" disclaimer; trade ticket with live quote and slippage warning; portfolio page.
+**`apps/web` was deleted on 2026-07-23 and is being rebuilt from scratch with a new visual design.** The full spec — stack, constraints, routes, auth contract, admin, testing, and build order — now lives in [`apps/web/ARCHITECTURE.md`](./apps/web/ARCHITECTURE.md), which is the current build truth for the frontend. Do not plan or build frontend work from this section; read that file instead.
 
-**No artist photography in v1** — generated geometric avatars from a name hash. Sidesteps both image licensing and right-of-publicity exposure, and is cheaper to build.
-
-**Done when:** a friend can sign up and trade in a browser.
-
-### As built
-
-Tailwind v4 + a small curated shadcn set (button, dialog, input, label, tabs — not the full component library), a deliberate stack decision over hand-rolled CSS. `apps/web/src/`: `app/{,artist,discover,leaderboard,portfolio,admin,auth/verify}/page.tsx`; `components/{AppShell,ArtistAvatar,ArtistCard,HoldingRow,OnboardingScreen,PortfolioValueChart,PriceChart,SignInPanel,TradeTicket}.tsx`; `lib/{api,queries,format,avatar,constants,errors,theme-context}.ts`, `api.ts` generated from the FastAPI OpenAPI schema per CLAUDE.md's rule against hand-editing it.
-
-Also landed in this phase, ahead of its own PLAN.md placement: `cli.py`'s dev-speed unlocks (`ax fake-history`, `ax simulate-trades`, `ax reset` — see "Local dev and faking history" below), an admin quarantine review-queue UI (`app/admin/`, `api/routers/admin.py`) fulfilling Phase 3's own "surface `flagged_artists` in an admin view" follow-up note, and a portfolio performance chart with a range selector.
-
-This session did not build Phase 5, so there is no first-hand "decisions and surprises" account here the way every other phase has — see `git log` for the real build history (`3f46a00`, `29ee79f`, and the UI-polish commits before Phase 6). **This phase's literal "Done when" was never satisfied by a recorded human test.** What stands in for it: Phase 6's Playwright suite drives a real browser through claim-username → buy → see-the-position-in-your-portfolio against a real API and Postgres, verified green multiple times in a row — a stronger, repeatable guarantee than a one-time manual click-through, if not literally the same check.
-
-**Update (2026-07-23):** `apps/web` is being deleted and rebuilt (spec: `apps/web/ARCHITECTURE.md`); the rebuild changes the dual-line chart described above from always-on to user-toggleable, off by default. This paragraph and the spec line above it describe what v1 actually shipped and are left as-is for the historical record — they're superseded by `ARCHITECTURE.md`, not corrected here. See project memory `project_web_rewrite` for the full rationale.
+What shipped once and was deleted: a Next.js static-export SPA (Tailwind v4 + shadcn, TanStack Query, generated OpenAPI client) covering artist list/detail with the signature dual-line price chart, trade ticket, portfolio, and an admin quarantine queue. It was never verified against this phase's own literal "Done when" (a friend trading unattended) — Phase 6's Playwright suite covered the same signup → trade → portfolio path automatically instead. See `git log` (`3f46a00`, `29ee79f`, and the UI-polish commits before Phase 6) for that build's history if it's ever needed, and project memory `project_web_rewrite` / `project_phase5_spa` for the fuller rationale behind the rebuild.
 
 ---
 
@@ -706,7 +694,7 @@ The honest answer to cold start is still the phase ordering: Phase 1 ships in we
 - **P2** — `uv run pytest` green, coverage ≥90% on `core/`. Run `ax backtest` and eyeball the index series for plausibility — do known-growing artists actually score higher?
 - **P3** — Query `index_snapshots` for real dates; plot fair value for a few artists and sanity-check direction against what you know about those artists. **Confirm some artists' fair values went DOWN** — that's the real-world I8 check.
 - **P4** — Run the signup → buy → portfolio → sell script; verify the round trip loses ~2% (`TRADE_FEE_BPS = 100` each leg, retuned in Phase 2) and `SELECT * FROM v_balances` matches `balance_cache`.
-- **P5** — Use `/run` to launch the app and click through it; then have one real friend sign up and trade unattended, and watch where they hesitate. *No human friend test is recorded; Phase 6's Playwright suite covers the same core path automatically instead — see that phase's "As built."*
+- **P5** — Superseded by the rebuild (see `apps/web/ARCHITECTURE.md`'s own "Build order" and "Testing" sections). The prior build's verification: use `/run` to launch the app and click through it; then have one real friend sign up and trade unattended, and watch where they hesitate. *No human friend test was recorded for that build; Phase 6's Playwright suite covered the same core path automatically instead — see that phase's "As built."*
 - **P6** — `pnpm e2e` green; leaderboards populate from `ax simulate-trades` data. **Done.**
 
 **Ongoing, before each commit:** `/verify` for behavior, `/code-review` on the diff. Commit at every phase boundary.

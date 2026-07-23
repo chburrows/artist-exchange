@@ -44,16 +44,16 @@ visual design:
 
 ## Stack
 
-| Layer         | Choice                                                                                                                                                                        |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework     | Next.js, App Router, static export — latest stable                                                                                                                            |
-| UI runtime    | React — latest stable                                                                                                                                                         |
-| Data fetching | TanStack Query — latest stable, wrapping the generated `openapi-fetch` client                                                                                                 |
-| Styling       | Tailwind CSS v4                                                                                                                                                               |
-| Components    | shadcn — copy in components as needed (`pnpm dlx shadcn add ...`); it's not a runtime dependency, which is the point: no framework lock-in, fully editable, minimal tech debt |
-| PWA           | Web manifest + minimal service worker (app-shell caching only)                                                                                                                |
-| E2E           | Playwright — write fresh specs covering the real signup/magic-link/collision contract against the same backend; the old `apps/web/e2e/` specs are **not** carried forward (see "Carry forward as-is")                                      |
-| Deploy        | Railway, Dockerfile-first — carry `railway.json` + `Dockerfile` forward as-is, they bake in several non-obvious static-export-to-`serve` fixes (the `Dockerfile`'s base image has a known vulnerability scan result — see "Carry forward as-is")                                         |
+| Layer         | Choice                                                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Framework     | Next.js, App Router, static export — latest stable                                                                                                                                                                                               |
+| UI runtime    | React — latest stable                                                                                                                                                                                                                            |
+| Data fetching | TanStack Query — latest stable, wrapping the generated `openapi-fetch` client                                                                                                                                                                    |
+| Styling       | Tailwind CSS v4                                                                                                                                                                                                                                  |
+| Components    | shadcn — copy in components as needed (`pnpm dlx shadcn add ...`); it's not a runtime dependency, which is the point: no framework lock-in, fully editable, minimal tech debt                                                                    |
+| PWA           | Web manifest + minimal service worker (app-shell caching only)                                                                                                                                                                                   |
+| E2E           | Playwright — write fresh specs covering the real signup/magic-link/collision contract against the same backend; the old `apps/web/e2e/` specs are **not** carried forward (see "Carry forward as-is")                                            |
+| Deploy        | Railway, Dockerfile-first — carry `railway.json` + `Dockerfile` forward as-is, they bake in several non-obvious static-export-to-`serve` fixes (the `Dockerfile`'s base image has a known vulnerability scan result — see "Carry forward as-is") |
 
 Check actual latest versions at scaffold time rather than pinning them here.
 
@@ -115,6 +115,56 @@ Role-gated, minimal to start: surface the Phase 3 quarantine queue
 (`PLAN.md`'s own follow-up) and quarantines never auto-clear. add a basic UI
 and acknowledge on the page that as of building there is no clear mechanism.
 
+## Auth contract (backend already ships this — build the UI to match)
+
+Signup is two-step and email is mandatory; there is no "attach email later"
+flow to build.
+
+- **`POST /auth/signup`** takes `{email, username?}` and always returns 202
+  (anti-enumeration — same shape whether or not the address already has an
+  account). If `username` is omitted the server generates one at consume
+  time. The client should prefill an editable username suggestion on mount
+  (adjective+noun+2-digit suffix, no dependency, no network call —
+  `lib/username.ts`, carried forward as-is) so the field is never blank, but
+  the user can type over it before submitting.
+- Submitting moves the UI to a "check your inbox" state, **not** a session —
+  signup no longer authenticates synchronously.
+- **`/auth/verify-signup`** (query param `token`) fires `POST
+/auth/signup/consume` on mount, same pattern as the existing
+  **`/auth/verify`** login-consume route. Both consume endpoints are `POST`,
+  not `GET` — a bot or link-scanner hitting a bare `GET` must not be able to
+  mutate state.
+- **Username collision on consume returns 409** and does _not_ burn the
+  token (the email ownership proof still stands). Show an inline "that
+  username's taken" retry prefilled with a fresh suggestion, resubmitting
+  the **same token** with a new `username` — don't send the user back to the
+  start of signup.
+- **`PATCH /auth/username`** renames a logged-in user. No dedicated
+  settings/profile page is needed for v1 — the reference implementation
+  exposed it as a `@username` button on the Portfolio page header opening a
+  small rename dialog, which is fine to repeat rather than building a
+  settings surface for one field.
+- `POST /auth/email` does not exist — do not build an "attach email" screen.
+
+## Leaderboard & discovery
+
+- `GET /leaderboard/{portfolio,scout}` are public endpoints that also accept
+  an optional session. Always render the caller's own rank/row ("you") even
+  when it falls outside the displayed top 25 — the endpoints return it
+  either way; don't hide it behind a "load more."
+- Discovery feeds ("fastest growing under $10," "biggest movers," "new
+  listings") are **not separate endpoints** — derive them client-side by
+  sorting/filtering the same artist list the `/artists` route already
+  fetches. Don't go looking for a discovery API.
+
+## Shareable portfolio card
+
+A cheap virality lever, confirmed with the user as mobile-first: render
+username/equity/return/holdings onto an offscreen `<canvas>`, then
+`navigator.share({ files })` where available (mobile) with a plain image
+download as the desktop fallback. No image-generation service/dependency —
+canvas is enough.
+
 ## Testing
 
 This rebuild is not exempt from tests — write them alongside each step below,
@@ -124,7 +174,18 @@ not as a deferred follow-up phase:
   suggestion, etc.) as they're written.
 - Playwright coverage for the signup/magic-link/username-collision contract,
   written fresh against the new UI. The old `e2e/*` specs are not carried
-  forward (see "Carry forward as-is") — port their *intent*, not their code.
+  forward (see "Carry forward as-is") — port their _intent_, not their code.
+- The API's `EMAIL_PROVIDER=console` mode (refused whenever `is_production`)
+  writes magic-link and signup-verification sends to a JSON-lines file
+  instead of calling Resend — this is how a spec gets a real token with no
+  inbox. Read the token from that file rather than inventing another way to
+  intercept email in tests.
+- Known Playwright gotchas from the previous build, worth guarding against
+  again: a username `<input maxLength={24}>` silently truncating a generated
+  test username; `getByLabel("Email")` matching a dialog's own accessible
+  name ambiguously (use `{ exact: true }`); and a page-wide element-count
+  assertion (e.g. counting `svg path`s) picking up Next's dev-overlay icons —
+  scope such assertions to `main`, not the whole page.
 
 ## Build order
 
@@ -134,10 +195,16 @@ not as a deferred follow-up phase:
 2. Auth flow wired to the real endpoints (signup, magic link, session), with
    Playwright coverage landing alongside it, not after.
 3. Core routes with real data plumbing, placeholder visuals.
-4. Admin page.
-5. Apply the Claude-design visual design on top. Steps 1–4 exist so that
+4. Apply the Claude-design visual design on top. Steps 1–4 exist so that
    restyling never requires re-plumbing — don't invest real visual design
    effort before the design file lands.
+5. Admin page
+
+   To implement the design on step 5:
+   Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+   https://claude.ai/design/p/5ae6c253-8c0b-4754-8aff-e4d332068835?file=Artist+Exchange.dc.html
+
+Implement: Artist Exchange.dc.html
 
 ## Carry forward as-is
 
