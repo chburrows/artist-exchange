@@ -34,7 +34,7 @@ The contrast is itself a feature: "biggest movers" will almost always be growth 
 
 **Trading** — buy and sell long positions in play money. No margin, no leverage, no order book; an AMM means there's always a counterparty. Every new user starts with a fixed play-money balance.
 
-**Discovery** — feed views that double as marketing hooks: "fastest growing under $10," "biggest movers," "new listings." Plus the per-artist chart showing market price against the index fair-value line. That chart is the product's signature visual and is worth investing in early.
+**Discovery** — feed views that double as marketing hooks: "fastest growing under $10," "biggest movers," "new listings." Plus the per-artist chart showing market price against the index fair-value line — the fair-value overlay is off by default and user-toggled, so it doesn't overstate its own authority or spoil the discovery moment of watching a pick's line pull ahead, but revealing it is the product's signature visual and is worth investing in early.
 
 **Leaderboards** — two, deliberately:
 

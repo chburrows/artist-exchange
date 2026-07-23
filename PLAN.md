@@ -427,6 +427,8 @@ Also landed in this phase, ahead of its own PLAN.md placement: `cli.py`'s dev-sp
 
 This session did not build Phase 5, so there is no first-hand "decisions and surprises" account here the way every other phase has — see `git log` for the real build history (`3f46a00`, `29ee79f`, and the UI-polish commits before Phase 6). **This phase's literal "Done when" was never satisfied by a recorded human test.** What stands in for it: Phase 6's Playwright suite drives a real browser through claim-username → buy → see-the-position-in-your-portfolio against a real API and Postgres, verified green multiple times in a row — a stronger, repeatable guarantee than a one-time manual click-through, if not literally the same check.
 
+**Update (2026-07-23):** `apps/web` is being deleted and rebuilt (spec: `apps/web/ARCHITECTURE.md`); the rebuild changes the dual-line chart described above from always-on to user-toggleable, off by default. This paragraph and the spec line above it describe what v1 actually shipped and are left as-is for the historical record — they're superseded by `ARCHITECTURE.md`, not corrected here. See project memory `project_web_rewrite` for the full rationale.
+
 ---
 
 ## Phase 6 — Leaderboards, discovery, polish
