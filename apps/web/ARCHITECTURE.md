@@ -195,14 +195,12 @@ not as a deferred follow-up phase:
 2. Auth flow wired to the real endpoints (signup, magic link, session), with
    Playwright coverage landing alongside it, not after.
 3. Core routes with real data plumbing, placeholder visuals.
-4. Apply the Claude-design visual design on top. Steps 1–4 exist so that
+4. Apply the Claude-design visual design on top. Steps 1–3 exist so that
    restyling never requires re-plumbing — don't invest real visual design
    effort before the design file lands.
-5. Admin page
-
-   To implement the design on step 5:
    Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
    https://claude.ai/design/p/5ae6c253-8c0b-4754-8aff-e4d332068835?file=Artist+Exchange.dc.html
+5. Admin page
 
 Implement: Artist Exchange.dc.html
 

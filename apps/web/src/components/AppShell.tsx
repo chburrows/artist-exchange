@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { useLogout, useMe } from "@/lib/queries";
 import { useTheme } from "@/lib/theme-context";
 
 const NAV_LINKS = [
@@ -13,6 +14,8 @@ const NAV_LINKS = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme } = useTheme();
+  const me = useMe();
+  const logout = useLogout();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -34,6 +37,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             {theme === "dark" ? "Dark" : "Light"}
           </button>
+          {me.data && (
+            <button
+              type="button"
+              onClick={() => logout.mutate()}
+              className="border-border min-h-11 rounded-md border px-3"
+            >
+              Log out
+            </button>
+          )}
         </nav>
       </header>
       <main className="flex-1 p-4">{children}</main>
