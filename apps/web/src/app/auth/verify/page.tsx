@@ -24,27 +24,37 @@ function VerifyContent() {
   }, [token, consume, router]);
 
   if (!token) {
-    return <p className="text-sm text-muted-foreground">No token present.</p>;
+    return (
+      <>
+        <h1 className="text-2xl font-bold">Link invalid</h1>
+        <p className="mt-2 text-sm text-muted-foreground">No token present.</p>
+      </>
+    );
   }
   if (consume.isError) {
     return (
-      <p className="text-sm text-destructive">
-        {errorMessage(consume.error, "That link is invalid or expired.")}
-      </p>
+      <>
+        <h1 className="text-2xl font-bold">Link invalid</h1>
+        <p className="mt-2 text-sm text-destructive">
+          {errorMessage(consume.error, "That link is invalid or expired.")}
+        </p>
+      </>
     );
   }
-  return <p className="text-sm text-muted-foreground">Signing you in…</p>;
+  return (
+    <>
+      <h1 className="text-2xl font-bold">Signing you in…</h1>
+      <p className="mt-2 text-sm text-muted-foreground">Signing you in…</p>
+    </>
+  );
 }
 
 export default function VerifyPage() {
   return (
     <div className="mx-auto max-w-md py-16 text-center">
-      <h1 className="text-2xl font-bold">Signing you in…</h1>
-      <div className="mt-2">
-        <Suspense>
-          <VerifyContent />
-        </Suspense>
-      </div>
+      <Suspense fallback={<h1 className="text-2xl font-bold">Signing you in…</h1>}>
+        <VerifyContent />
+      </Suspense>
     </div>
   );
 }

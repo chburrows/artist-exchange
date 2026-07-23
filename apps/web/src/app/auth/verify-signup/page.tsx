@@ -23,21 +23,36 @@ function VerifySignupContent() {
   const consume = useConsumeSignup();
   const attempted = useRef(false);
   const [retryUsername, setRetryUsername] = useState(generateUsername);
+  // Set from the mutation's own onError, not derived from consume.isError --
+  // that flag resets to false the instant a retry's mutate() is called,
+  // which would otherwise unmount this form and flash the generic
+  // "Confirming your account…" message for the duration of the request.
+  const [showConflictForm, setShowConflictForm] = useState(false);
 
   useEffect(() => {
     if (!token || attempted.current) return;
     attempted.current = true;
-    consume.mutate({ token }, { onSuccess: () => router.replace("/") });
+    consume.mutate(
+      { token },
+      {
+        onSuccess: () => router.replace("/"),
+        onError: (error) => setShowConflictForm(errorMessage(error, "") === USERNAME_TAKEN_DETAIL),
+      },
+    );
   }, [token, consume, router]);
 
   if (!token) return <Message text="No token present." />;
 
-  const isUsernameConflict = consume.isError && errorMessage(consume.error, "") === USERNAME_TAKEN_DETAIL;
-
-  if (isUsernameConflict) {
+  if (showConflictForm) {
     const handleRetry = (e: React.FormEvent) => {
       e.preventDefault();
-      consume.mutate({ token, username: retryUsername }, { onSuccess: () => router.replace("/") });
+      consume.mutate(
+        { token, username: retryUsername },
+        {
+          onSuccess: () => router.replace("/"),
+          onError: (error) => setShowConflictForm(errorMessage(error, "") === USERNAME_TAKEN_DETAIL),
+        },
+      );
     };
     return (
       <div className="mx-auto flex max-w-xs flex-col gap-3 py-16 text-center">
