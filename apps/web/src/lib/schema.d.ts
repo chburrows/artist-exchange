@@ -44,10 +44,11 @@ export interface paths {
          *
          *     Username collision handling has one rule: a value nobody chose (this
          *     request omitted `username` *and* the original request did too) is
-         *     the server's problem, retried in-process with a fresh generated
-         *     candidate; a value somebody chose -- typed at request time, or
-         *     supplied again here -- is a 409 for the caller to resolve, and
-         *     `consumed_at` is deliberately left unset so the token (proof of inbox
+         *     the server's problem -- `_pick_username` pre-filters a batch of
+         *     generated candidates against `users` so a real collision is rare;
+         *     a value somebody chose -- typed at request time, or supplied again
+         *     here -- is a 409 for the caller to resolve. Either way `consumed_at`
+         *     is deliberately left unset on a 409 so the token (proof of inbox
          *     ownership) is still good for a retry against a different username.
          */
         post: operations["consume_signup_auth_signup_consume_post"];
@@ -273,10 +274,10 @@ export interface paths {
          * @description Real daily equity, oldest first -- written by `jobs/leaderboard.py`,
          *     not computed live. A brand-new account, or one that signed up before
          *     tonight's job has run once, legitimately has zero points: the
-         *     frontend's `PortfolioValueChart` already renders an honest "not
-         *     enough history yet" state for fewer than two points, so there is
-         *     nothing to backfill or fake here (CLAUDE.md: an honest absence beats
-         *     a stub).
+         *     frontend's `PortfolioValueChart` renders a stand-in for fewer than two
+         *     points -- a live two-point series (starting balance or last snapshot,
+         *     to current equity) once the user has traded, or a clearly-labeled demo
+         *     chart before that -- so there is nothing to backfill or fake here.
          */
         get: operations["get_portfolio_history_portfolio_history_get"];
         put?: never;

@@ -78,10 +78,10 @@ def get_portfolio_history(db: DbDep, user: CurrentUserDep) -> PortfolioHistoryRe
     """Real daily equity, oldest first -- written by `jobs/leaderboard.py`,
     not computed live. A brand-new account, or one that signed up before
     tonight's job has run once, legitimately has zero points: the
-    frontend's `PortfolioValueChart` already renders an honest "not
-    enough history yet" state for fewer than two points, so there is
-    nothing to backfill or fake here (CLAUDE.md: an honest absence beats
-    a stub)."""
+    frontend's `PortfolioValueChart` renders a stand-in for fewer than two
+    points -- a live two-point series (starting balance or last snapshot,
+    to current equity) once the user has traded, or a clearly-labeled demo
+    chart before that -- so there is nothing to backfill or fake here."""
     stmt = (
         select(EquitySnapshot)
         .where(EquitySnapshot.user_id == user.id)

@@ -6,7 +6,9 @@ import { ArtistCard } from "@/components/ArtistCard";
 import { HoldingRow } from "@/components/HoldingRow";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
+import { STARTING_BALANCE_CENTS } from "@/lib/constants";
 import { formatCents, formatPct, pctChange } from "@/lib/format";
+import { buildLiveChartPoints, computeHasTraded, isChartTrendPositive } from "@/lib/portfolio-chart";
 import {
   useArtists,
   useMe,
@@ -17,8 +19,9 @@ import {
 
 export default function HomePage() {
   const me = useMe();
+  const portfolio = usePortfolio(!!me.data);
 
-  if (me.isLoading) {
+  if (me.isLoading || (me.data && portfolio.isLoading)) {
     return <p className="py-16 text-center text-sm text-muted-foreground">Loading…</p>;
   }
   if (!me.data) {
@@ -35,6 +38,7 @@ function HomeDashboard({ username }: { username: string }) {
 
   const positions = portfolio.data?.positions ?? [];
   const equityCents = portfolio.data?.equity_cents ?? 0;
+  const hasTraded = computeHasTraded(positions.length, portfolio.data?.cash_cents ?? STARTING_BALANCE_CENTS);
 
   // Real day-over-day change: today's live equity against last night's
   // nightly snapshot -- absent (not faked) until at least one snapshot
@@ -45,7 +49,12 @@ function HomeDashboard({ username }: { username: string }) {
   const dayChangeCents = hasDayChange ? equityCents - yesterday.equity_cents : 0;
   const dayChangePct = hasDayChange ? pctChange(yesterday.equity_cents, equityCents) : 0;
 
-  const chartPoints = historyPoints.slice(-30).map((p) => ({ valueCents: p.equity_cents }));
+  const chartPoints = buildLiveChartPoints(
+    historyPoints.slice(-30).map((p) => ({ valueCents: p.equity_cents })),
+    equityCents,
+    hasTraded,
+  );
+  const chartPositive = isChartTrendPositive(chartPoints);
 
   const bestCall = [...positions].sort((a, b) => {
     const pctA = pctChange(a.avg_cost_cents, a.spot_price_cents);
@@ -79,11 +88,14 @@ function HomeDashboard({ username }: { username: string }) {
           <div className="text-sm text-muted-foreground">New today</div>
         )}
 
-        {chartPoints.length > 0 && (
-          <div className="mt-3">
-            <PortfolioValueChart points={chartPoints} positive={dayChangeCents >= 0} height={72} />
-          </div>
-        )}
+        <div className="mt-3">
+          <PortfolioValueChart
+            points={chartPoints}
+            positive={chartPositive}
+            height={72}
+            hasTraded={hasTraded}
+          />
+        </div>
 
         {bestCall && (
           <div className="mt-3 border-t border-border pt-3">

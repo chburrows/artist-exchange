@@ -153,9 +153,10 @@ export function usePortfolio(enabled: boolean) {
 
 /** Real daily equity history (PLAN.md Phase 6), written nightly by
  * `jobs/leaderboard.py` -- empty for an account that predates tonight's
- * first run. `PortfolioValueChart` already renders an honest "not enough
- * history yet" state for fewer than two points, so an empty array needs
- * no special handling here. */
+ * first run. `PortfolioValueChart` already renders a stand-in state for
+ * fewer than two points (a live two-point series once the user has
+ * traded, or a demo chart before that), so an empty array needs no
+ * special handling here. */
 export function usePortfolioHistory(enabled: boolean) {
   return useQuery({
     queryKey: ["portfolio-history"],

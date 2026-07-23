@@ -9,11 +9,23 @@ import { ShareCardDialog } from "@/components/ShareCardDialog";
 import { UsernameEditDialog } from "@/components/UsernameEditDialog";
 import { STARTING_BALANCE_CENTS } from "@/lib/constants";
 import { formatCents, formatPct, pctChange } from "@/lib/format";
-import { useMe, usePortfolio, usePortfolioHistory, useScoutLeaderboard } from "@/lib/queries";
+import { buildLiveChartPoints, computeHasTraded, isChartTrendPositive } from "@/lib/portfolio-chart";
+import {
+  useMe,
+  usePortfolio,
+  usePortfolioHistory,
+  useScoutLeaderboard,
+} from "@/lib/queries";
 
 const RANGES = ["1W", "1M", "3M", "1Y", "ALL"] as const;
 type Range = (typeof RANGES)[number];
-const RANGE_DAYS: Record<Range, number> = { "1W": 7, "1M": 30, "3M": 90, "1Y": 365, ALL: Infinity };
+const RANGE_DAYS: Record<Range, number> = {
+  "1W": 7,
+  "1M": 30,
+  "3M": 90,
+  "1Y": 365,
+  ALL: Infinity,
+};
 
 export default function PortfolioPage() {
   const me = useMe();
@@ -64,6 +76,7 @@ export default function PortfolioPage() {
   const totalGainCents = equity_cents - STARTING_BALANCE_CENTS;
   const totalGainPct = pctChange(STARTING_BALANCE_CENTS, equity_cents);
   const scoutShares = positions.reduce((sum, p) => sum + p.scout_shares, 0);
+  const hasTraded = computeHasTraded(positions.length, cash_cents);
 
   // Your single best scouting call: the currently-held scout-qualified
   // position with the highest unrealized return, computed live from real
@@ -73,27 +86,54 @@ export default function PortfolioPage() {
   // requires comparing against every other user).
   const bestScout = positions
     .filter((p) => p.scout_shares > 0)
-    .map((p) => ({ position: p, pct: pctChange(p.avg_cost_cents, p.spot_price_cents) }))
+    .map((p) => ({
+      position: p,
+      pct: pctChange(p.avg_cost_cents, p.spot_price_cents),
+    }))
     .sort((a, b) => b.pct - a.pct)[0];
   const scoutRank = scoutLeaderboard.data?.you?.rank;
 
   // Real nightly equity snapshots (PLAN.md Phase 6), oldest first --
   // empty for an account that predates tonight's first run.
-  const equityPoints = (history.data?.points ?? []).map((p) => ({ valueCents: p.equity_cents }));
+  const equityPoints = (history.data?.points ?? []).map((p) => ({
+    valueCents: p.equity_cents,
+  }));
   const hasEnoughHistory = equityPoints.length >= 2;
-  const rangeDays = hasEnoughHistory ? Math.min(RANGE_DAYS[range], equityPoints.length) : 0;
-  const rangeSlice = hasEnoughHistory ? equityPoints.slice(equityPoints.length - rangeDays) : [];
+  const rangeDays = hasEnoughHistory
+    ? Math.min(RANGE_DAYS[range], equityPoints.length)
+    : 0;
+  const rangeSlice = hasEnoughHistory
+    ? equityPoints.slice(equityPoints.length - rangeDays)
+    : [];
   const rangeChangePct = hasEnoughHistory
-    ? pctChange(rangeSlice[0].valueCents, rangeSlice[rangeSlice.length - 1].valueCents)
+    ? pctChange(
+        rangeSlice[0].valueCents,
+        rangeSlice[rangeSlice.length - 1].valueCents,
+      )
     : 0;
   const rangePositive = rangeChangePct >= 0;
-  const rangeHigh = hasEnoughHistory ? Math.max(...rangeSlice.map((p) => p.valueCents)) : 0;
-  const rangeLow = hasEnoughHistory ? Math.min(...rangeSlice.map((p) => p.valueCents)) : 0;
-  const avgDailyPct = hasEnoughHistory ? rangeChangePct / (rangeSlice.length - 1) : 0;
-  const dailyReturns = rangeSlice.slice(1).map((p, i) => pctChange(rangeSlice[i].valueCents, p.valueCents));
+  const rangeHigh = hasEnoughHistory
+    ? Math.max(...rangeSlice.map((p) => p.valueCents))
+    : 0;
+  const rangeLow = hasEnoughHistory
+    ? Math.min(...rangeSlice.map((p) => p.valueCents))
+    : 0;
+  const avgDailyPct = hasEnoughHistory
+    ? rangeChangePct / (rangeSlice.length - 1)
+    : 0;
+  const dailyReturns = rangeSlice
+    .slice(1)
+    .map((p, i) => pctChange(rangeSlice[i].valueCents, p.valueCents));
   const volatilityPct = Math.sqrt(
-    dailyReturns.reduce((sum, r) => sum + r * r, 0) / Math.max(dailyReturns.length, 1),
+    dailyReturns.reduce((sum, r) => sum + r * r, 0) /
+      Math.max(dailyReturns.length, 1),
   );
+
+  // Kept separate from `equityPoints`/`hasEnoughHistory` -- those still
+  // mean "real multi-point series", which the High/Low/Volatility stats
+  // below require and shouldn't compute over a synthesized fallback.
+  const liveChartPoints = buildLiveChartPoints(equityPoints, equity_cents, hasTraded);
+  const livePositive = isChartTrendPositive(liveChartPoints);
 
   return (
     <div className="flex flex-col gap-6 pb-6">
@@ -128,16 +168,21 @@ export default function PortfolioPage() {
           </button>
         </div>
         <div className="rounded-2xl border border-border bg-card px-4 py-3.5 text-right">
-          <div className="text-[11px] whitespace-nowrap text-muted-foreground">Talent Scout</div>
+          <div className="text-[11px] whitespace-nowrap text-muted-foreground">
+            Talent Scout
+          </div>
           {bestScout ? (
             <>
               <div className="text-xl font-extrabold text-primary">
                 {formatPct(bestScout.pct)}
                 {scoutRank !== undefined && (
-                  <span className="text-xs font-medium text-muted-foreground"> · #{scoutRank}</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {" "}
+                    · #{scoutRank}
+                  </span>
                 )}
               </div>
-              <div className="max-w-[10rem] truncate text-[11px] text-muted-foreground">
+              <div className="max-w-40 truncate text-[11px] text-muted-foreground">
                 on {bestScout.position.artist_name}
               </div>
             </>
@@ -149,63 +194,73 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {equityPoints.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-5">
-          {hasEnoughHistory && (
-            <div className="mb-3 flex items-center justify-between">
-              <span
-                className={`text-sm font-bold ${rangePositive ? "text-positive" : "text-destructive"}`}
-              >
-                {formatPct(rangeChangePct)} over {range}
-              </span>
-              <div className="flex gap-1 rounded-lg bg-secondary p-1">
-                {RANGES.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setRange(r)}
-                    className={`cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-bold ${
-                      range === r ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
+      <div className="rounded-2xl border border-border bg-card p-5">
+        {hasEnoughHistory && (
+          <div className="mb-3 flex items-center justify-between">
+            <span
+              className={`text-sm font-bold ${rangePositive ? "text-positive" : "text-destructive"}`}
+            >
+              {formatPct(rangeChangePct)} over {range}
+            </span>
+            <div className="flex gap-1 rounded-lg bg-secondary p-1">
+              {RANGES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-bold ${
+                    range === r
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <PortfolioValueChart
+          points={hasEnoughHistory ? rangeSlice : liveChartPoints}
+          positive={hasEnoughHistory ? rangePositive : livePositive}
+          hasTraded={hasTraded}
+        />
+        {hasEnoughHistory && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="cursor-pointer text-xs font-bold text-primary"
+            >
+              {showAdvanced ? "Hide details" : "Show details"}
+            </button>
+          </div>
+        )}
+        {hasEnoughHistory && showAdvanced && (
+          <div className="grid grid-cols-2 gap-3 border-t border-border pt-3 sm:grid-cols-4">
+            <div>
+              <div className="text-[11px] text-muted-foreground">High</div>
+              <div className="text-sm font-bold">{formatCents(rangeHigh)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground">Low</div>
+              <div className="text-sm font-bold">{formatCents(rangeLow)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground">Avg daily</div>
+              <div className="text-sm font-bold">
+                {formatPct(avgDailyPct, 2)}
               </div>
             </div>
-          )}
-          <PortfolioValueChart points={hasEnoughHistory ? rangeSlice : equityPoints} positive={rangePositive} />
-          {hasEnoughHistory && (
-            <div className="flex justify-end">
-              <button
-                onClick={() => setShowAdvanced((v) => !v)}
-                className="cursor-pointer text-xs font-bold text-primary"
-              >
-                {showAdvanced ? "Hide details" : "Show details"}
-              </button>
-            </div>
-          )}
-          {hasEnoughHistory && showAdvanced && (
-            <div className="grid grid-cols-2 gap-3 border-t border-border pt-3 sm:grid-cols-4">
-              <div>
-                <div className="text-[11px] text-muted-foreground">High</div>
-                <div className="text-sm font-bold">{formatCents(rangeHigh)}</div>
+            <div>
+              <div className="text-[11px] text-muted-foreground">
+                Volatility
               </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">Low</div>
-                <div className="text-sm font-bold">{formatCents(rangeLow)}</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">Avg daily</div>
-                <div className="text-sm font-bold">{formatPct(avgDailyPct, 2)}</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">Volatility</div>
-                <div className="text-sm font-bold">{volatilityPct.toFixed(2)}%</div>
+              <div className="text-sm font-bold">
+                {volatilityPct.toFixed(2)}%
               </div>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       <div>
         <h2 className="mb-1 text-xs font-bold tracking-wide text-muted-foreground uppercase">
