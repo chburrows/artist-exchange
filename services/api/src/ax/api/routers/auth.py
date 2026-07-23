@@ -132,7 +132,7 @@ class ConsumeResponse(BaseModel):
 
 class _CookieAttrs(NamedTuple):
     secure: bool
-    samesite: Literal["none", "lax"]
+    samesite: Literal["lax"]
 
 
 def _cookie_attrs(settings: Settings) -> _CookieAttrs:
@@ -141,16 +141,16 @@ def _cookie_attrs(settings: Settings) -> _CookieAttrs:
     `SameSite`/`Path` match the original exactly, so these can't be two
     independent copies that might drift.
 
-    The web app is always cross-origin from the API (static export on a
-    different host, per CLAUDE.md), so a cross-site cookie needs
-    `SameSite=None` -- which browsers only honor alongside `Secure`,
-    hence the pairing with `is_production` rather than a fixed value.
-    Local/test runs over plain HTTP, where `Secure` cookies wouldn't be
-    sent at all, fall back to `Lax` (same-site is realistic there:
-    localhost talking to localhost)."""
+    The web app is cross-origin from the API but always same-site: both
+    are subdomains of the same registrable domain in production
+    (`artistexchange.chburrows.com` / `api.artistexchange.chburrows.com`),
+    and `localhost:3000`/`localhost:8000` are same-site locally too (port
+    is irrelevant to `SameSite`). `Lax` is therefore correct everywhere --
+    only `Secure` needs to vary, since plain-HTTP local/test runs would
+    silently drop a `Secure` cookie entirely."""
     return _CookieAttrs(
         secure=settings.is_production,
-        samesite="none" if settings.is_production else "lax",
+        samesite="lax",
     )
 
 
