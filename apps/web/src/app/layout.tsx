@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
-import { bodyFont, headingFont } from "@/lib/fonts";
+import { bodyFont, headingFont, monoFont } from "@/lib/fonts";
 import { ServiceWorkerRegister } from "@/lib/register-service-worker";
 import { ThemeBootstrapScript } from "@/lib/theme-context";
 
@@ -14,6 +14,18 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
+// `viewport-fit=cover` lets the layout extend under notches so the
+// bottom tab bar's `env(safe-area-inset-bottom)` padding has something
+// to work with. `themeColor` reacts to the visitor's theme so the mobile
+// status bar matches the app-shell chrome in both modes.
+export const viewport: Viewport = {
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f6f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0b0f" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -25,7 +37,11 @@ export default function RootLayout({
     // first paint to avoid a flash of the wrong theme, which means the
     // class it sets will always differ from this statically-exported
     // page's server-rendered markup.
-    <html lang="en" className={`${bodyFont.variable} ${headingFont.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${bodyFont.variable} ${headingFont.variable} ${monoFont.variable}`}
+      suppressHydrationWarning
+    >
       <body>
         <ThemeBootstrapScript />
         <ServiceWorkerRegister />

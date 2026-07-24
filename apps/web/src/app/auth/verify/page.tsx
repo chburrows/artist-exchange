@@ -1,10 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 
+import { BrandMark } from "@/components/BrandMark";
 import { errorMessage } from "@/lib/errors";
 import { useConsumeMagicLink } from "@/lib/queries";
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="animate-pop-in mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center">
+      {children}
+    </div>
+  );
+}
 
 // Login magic-link consume. `POST`, not `GET`, per auth.py's own
 // reasoning: a bot or link-scanner hitting a bare `GET` must not be able
@@ -25,36 +35,44 @@ function VerifyContent() {
 
   if (!token) {
     return (
-      <>
-        <h1 className="text-2xl font-bold">Link invalid</h1>
-        <p className="mt-2 text-sm text-muted-foreground">No token present.</p>
-      </>
+      <Shell>
+        <h1 className="font-heading text-2xl font-bold">Link invalid</h1>
+        <p className="text-muted-foreground text-sm">No token present.</p>
+      </Shell>
     );
   }
   if (consume.isError) {
     return (
-      <>
-        <h1 className="text-2xl font-bold">Link invalid</h1>
-        <p className="mt-2 text-sm text-destructive">
+      <Shell>
+        <h1 className="font-heading text-2xl font-bold">Link invalid</h1>
+        <p className="text-destructive text-sm">
           {errorMessage(consume.error, "That link is invalid or expired.")}
         </p>
-      </>
+        <Link href="/" className="text-primary text-sm font-bold">
+          Back to signup →
+        </Link>
+      </Shell>
     );
   }
   return (
-    <>
-      <h1 className="text-2xl font-bold">Signing you in…</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Signing you in…</p>
-    </>
+    <Shell>
+      <BrandMark size={44} withWordmark={false} className="animate-pulse-glow" />
+      <h1 className="font-heading text-2xl font-bold">Signing you in…</h1>
+      <p className="text-muted-foreground text-sm">One second while we open your session.</p>
+    </Shell>
   );
 }
 
 export default function VerifyPage() {
   return (
-    <div className="mx-auto max-w-md py-16 text-center">
-      <Suspense fallback={<h1 className="text-2xl font-bold">Signing you in…</h1>}>
-        <VerifyContent />
-      </Suspense>
-    </div>
+    <Suspense
+      fallback={
+        <Shell>
+          <h1 className="font-heading text-2xl font-bold">Signing you in…</h1>
+        </Shell>
+      }
+    >
+      <VerifyContent />
+    </Suspense>
   );
 }

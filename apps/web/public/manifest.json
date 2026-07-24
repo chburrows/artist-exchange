@@ -4,8 +4,8 @@
   "description": "Trade play-money shares in rising artists.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d0e12",
-  "theme_color": "#0d0e12",
+  "background_color": "#0a0b0f",
+  "theme_color": "#0a0b0f",
   "icons": [
     {
       "src": "/icons/icon-192.png",

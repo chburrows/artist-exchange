@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,8 +56,9 @@ function VerifySignupContent() {
       );
     };
     return (
-      <div className="mx-auto flex max-w-xs flex-col gap-3 py-16 text-center">
-        <p className="text-sm text-muted-foreground">That username&apos;s taken. Try another:</p>
+      <div className="animate-pop-in mx-auto flex max-w-xs flex-col gap-4 py-20 text-center">
+        <BrandMark size={40} withWordmark={false} className="mx-auto" />
+        <p className="text-muted-foreground text-sm">That username&apos;s taken. Try another:</p>
         <form onSubmit={handleRetry} className="flex flex-col gap-3 text-left">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="retry-username">Username</Label>
@@ -80,20 +82,25 @@ function VerifySignupContent() {
 
   if (consume.isError) {
     return (
-      <div className="flex flex-col items-center gap-3 py-16 text-center">
+      <div className="animate-pop-in flex flex-col items-center gap-3 py-20 text-center">
         <Message text={errorMessage(consume.error, "This link is invalid or expired.")} />
-        <Link href="/" className="text-sm font-bold text-primary">
+        <Link href="/" className="text-primary text-sm font-bold">
           Back to signup →
         </Link>
       </div>
     );
   }
 
-  return <Message text="Confirming your account…" />;
+  return (
+    <div className="animate-pop-in mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center">
+      <BrandMark size={44} withWordmark={false} className="animate-pulse-glow" />
+      <p className="text-muted-foreground text-sm">Confirming your account…</p>
+    </div>
+  );
 }
 
 function Message({ text }: { text: string }) {
-  return <p className="py-16 text-center text-sm text-muted-foreground">{text}</p>;
+  return <p className="text-muted-foreground py-20 text-center text-sm">{text}</p>;
 }
 
 export default function VerifySignupPage() {
