@@ -6,8 +6,20 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 type Theme = "light" | "dark";
 
 const STORAGE_KEY = "ax-theme";
+const LIGHT_THEME_COLOR = "#f7f6f2";
+const DARK_THEME_COLOR = "#0a0b0f";
 
 const ThemeContext = createContext<{ theme: Theme; toggleTheme: () => void } | null>(null);
+
+// Keeps the `<meta name="theme-color">` tag (which paints the mobile
+// status bar / home-indicator strip) in sync with the *app's* active
+// theme. This has to be a direct DOM write, not a `prefers-color-scheme`
+// media query on the meta tag, because the app's theme is a manual
+// toggle that can and does disagree with the OS setting.
+function applyThemeColor(dark: boolean) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", dark ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
+}
 
 // Runs via next/script `beforeInteractive`, injected into <head> and
 // executed before first paint -- applies the persisted (or OS-preferred)
@@ -22,6 +34,8 @@ const THEME_BOOTSTRAP = `
     var stored = localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
     var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
     if (dark) document.documentElement.classList.add("dark");
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", dark ? ${JSON.stringify(DARK_THEME_COLOR)} : ${JSON.stringify(LIGHT_THEME_COLOR)});
   } catch (e) {}
 })();
 `;
@@ -53,6 +67,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
+    applyThemeColor(theme === "dark");
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
