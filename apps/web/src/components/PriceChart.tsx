@@ -28,7 +28,20 @@ const PAD = 10;
 const DIMS = { width: W, height: H, pad: PAD };
 
 /** The product's signature UI: market price vs. index fair value. */
-export function PriceChart({ points }: { points: HistoryPoint[] }) {
+export function PriceChart({
+  points,
+  spotPriceCents,
+}: {
+  points: HistoryPoint[];
+  /** Live spot price (`ArtistOut.spot_price_cents`). Drives the headline
+   * number, % change badge, and line color so they don't lag the header
+   * price elsewhere on the page -- the reversion glide moves it
+   * continuously, while `points` only gets a new row on trade/listing/
+   * reversion. Optional: falls back to the last persisted snapshot for
+   * callers without a live price handy. The plotted line/area always
+   * render the raw `points` series unchanged. */
+  spotPriceCents?: number;
+}) {
   const [showFairValue, setShowFairValue] = useState(false);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -76,11 +89,12 @@ export function PriceChart({ points }: { points: HistoryPoint[] }) {
 
   const first = points[0];
   const latest = points[points.length - 1];
+  const headlineCents = spotPriceCents ?? latest.market_price_cents;
   const changePct =
     first.market_price_cents === 0
       ? 0
-      : ((latest.market_price_cents - first.market_price_cents) / first.market_price_cents) * 100;
-  const up = latest.market_price_cents >= first.market_price_cents;
+      : ((headlineCents - first.market_price_cents) / first.market_price_cents) * 100;
+  const up = headlineCents >= first.market_price_cents;
   const lineColor = up ? "var(--positive)" : "var(--destructive)";
 
   const step = points.length > 1 ? (W - PAD * 2) / (points.length - 1) : 0;
@@ -107,7 +121,7 @@ export function PriceChart({ points }: { points: HistoryPoint[] }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-heading text-2xl font-bold tabular-nums">
-            {formatCents(latest.market_price_cents)}
+            {formatCents(headlineCents)}
           </p>
           <p className="mt-0.5 flex items-center gap-2 text-xs">
             <span className={cn("font-mono font-bold tabular-nums", up ? "text-positive" : "text-destructive")}>
@@ -138,7 +152,7 @@ export function PriceChart({ points }: { points: HistoryPoint[] }) {
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
-          className="h-48 w-full touch-none select-none md:h-56"
+          className="h-36 w-full touch-none select-none md:h-44"
           onPointerMove={onMove}
           onPointerDown={onMove}
           onPointerLeave={() => setHoverIdx(null)}

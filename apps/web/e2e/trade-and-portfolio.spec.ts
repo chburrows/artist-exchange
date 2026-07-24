@@ -23,7 +23,6 @@ test("buying an artist from its page updates the portfolio", async ({ page }) =>
   const artistName = await firstArtist.locator("span").first().innerText();
   await firstArtist.click();
 
-  await page.getByRole("button", { name: "Get quote" }).click();
   await expect(page.getByRole("button", { name: "Confirm buy" })).toBeVisible();
   await page.getByRole("button", { name: "Confirm buy" }).click();
   await expect(page.getByText(/^Bought 1 share/)).toBeVisible();

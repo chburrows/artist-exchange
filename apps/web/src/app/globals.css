@@ -145,42 +145,49 @@
   --font-mono: var(--font-mono-family), ui-monospace, monospace;
 }
 
-html {
-  height: 100%;
-}
+/* Layered (not left bare) so Tailwind's utility layer -- e.g. the
+   text-primary-foreground on Button's `asChild` <a> render -- can still
+   override these element defaults. Unlayered CSS always beats layered
+   CSS regardless of specificity, which silently broke button text color
+   on any Button rendered as a link. */
+@layer base {
+  html {
+    height: 100%;
+  }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
+  html,
+  body {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
 
-body {
-  min-height: 100%;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: var(--font-body-family), sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  body {
+    min-height: 100%;
+    color: var(--foreground);
+    background: var(--background);
+    font-family: var(--font-body-family), sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--font-heading-family), var(--font-body-family), sans-serif;
-  letter-spacing: -0.02em;
-}
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading-family), var(--font-body-family), sans-serif;
+    letter-spacing: -0.02em;
+  }
 
-* {
-  box-sizing: border-box;
-}
+  * {
+    box-sizing: border-box;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 ::selection {
@@ -303,11 +310,19 @@ a {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
+/* `.press` is unlayered, so wherever it's combined with Tailwind's
+   `transition-colors` utility (every Button, via buttonVariants) it wins
+   the `transition` property outright rather than merging with it -- the
+   cascade picks one winning declaration for the whole longhand list, it
+   doesn't union the two property lists. `color` must be listed here
+   explicitly or hover text-color changes (e.g. the ghost Button variant)
+   snap instead of animating. */
 .press {
   transition:
     transform 0.12s ease,
     background-color 0.15s ease,
     border-color 0.15s ease,
+    color 0.15s ease,
     opacity 0.15s ease;
 }
 .press:active {

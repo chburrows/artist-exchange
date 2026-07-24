@@ -39,8 +39,18 @@ const NAV: NavItem[] = [
     icon: CompassIcon,
     match: (p) => p.startsWith("/discover") || p.startsWith("/artist"),
   },
-  { href: "/portfolio", label: "Portfolio", icon: WalletIcon, match: (p) => p.startsWith("/portfolio") },
-  { href: "/leaderboard", label: "Leaderboard", icon: TrophyIcon, match: (p) => p.startsWith("/leaderboard") },
+  {
+    href: "/portfolio",
+    label: "Portfolio",
+    icon: WalletIcon,
+    match: (p) => p.startsWith("/portfolio"),
+  },
+  {
+    href: "/leaderboard",
+    label: "Leaderboard",
+    icon: TrophyIcon,
+    match: (p) => p.startsWith("/leaderboard"),
+  },
 ];
 
 function ThemeToggle({ className }: { className?: string }) {
@@ -55,7 +65,11 @@ function ThemeToggle({ className }: { className?: string }) {
         className,
       )}
     >
-      {theme === "dark" ? <SunIcon className="text-base" /> : <MoonIcon className="text-base" />}
+      {theme === "dark" ? (
+        <SunIcon className="text-base" />
+      ) : (
+        <MoonIcon className="text-base" />
+      )}
     </button>
   );
 }
@@ -116,7 +130,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2.5">
               <Avatar seed={me.data.username} entity="user" size={34} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold">@{me.data.username}</div>
+                <div className="truncate text-sm font-bold">
+                  @{me.data.username}
+                </div>
                 {cash !== null && (
                   <div className="text-primary font-mono text-xs font-bold tabular-nums">
                     {formatCents(cash)}
@@ -170,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-28 md:px-8 md:py-8 md:pb-10">
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-1 pb-28 md:px-8 md:py-8 md:pb-10">
           {children}
         </main>
 

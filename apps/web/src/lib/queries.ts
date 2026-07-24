@@ -4,7 +4,7 @@
  * (query keys, cache invalidation) -- this layer is genuinely
  * hand-written, unlike `api.ts`/`schema.d.ts`. */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "./api";
 import type { components } from "./schema";
@@ -162,11 +162,16 @@ export function useScoutLeaderboard() {
 export type TradeQuoteInput = { artist_slug: string; side: TradeSide; shares: number };
 
 /** Read-only preview -- `trades.py` takes no lock and writes nothing, so
- * this is a plain mutation (fires on demand) rather than a query keyed
- * off the input, even though nothing here mutates the trade tables. */
-export function useQuoteTrade() {
-  return useMutation({
-    mutationFn: async (body: TradeQuoteInput): Promise<QuoteResponse> => unwrap(await api.POST("/trades/quote", { body })),
+ * refetching it on every input change costs the server nothing. A query
+ * keyed on the trade inputs (rather than a manually-fired mutation) gives
+ * auto-refetch-on-change plus request dedup/cancellation for free, so the
+ * UI can show a live preview without an explicit "get quote" step. */
+export function useQuoteTrade(input: TradeQuoteInput | null) {
+  return useQuery({
+    queryKey: ["quote", input?.artist_slug, input?.side, input?.shares],
+    queryFn: async (): Promise<QuoteResponse> => unwrap(await api.POST("/trades/quote", { body: input! })),
+    enabled: input !== null,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -180,6 +185,7 @@ export function useExecuteTrade() {
       queryClient.invalidateQueries({ queryKey: ["portfolio-history"] });
       queryClient.invalidateQueries({ queryKey: ["artist-history", variables.artist_slug] });
       queryClient.invalidateQueries({ queryKey: ["artists"] });
+      queryClient.invalidateQueries({ queryKey: ["quote"] });
     },
   });
 }
