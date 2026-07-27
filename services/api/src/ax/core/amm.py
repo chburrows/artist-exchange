@@ -67,12 +67,19 @@ class ReversionPlan:
     `anchor_cents` is the *current* interpolated effective anchor at the
     moment the plan is made (C11) -- not the stale stored endpoint --
     so a late-firing cron never causes a discontinuous price jump.
+
+    `market_cents` is the true AMM spot price at `anchor_cents` and the
+    artist's current net supply -- the supply markup on top of the bare
+    anchor. Callers writing a `price_history` row for this reversion must
+    use `market_cents`, not `anchor_cents`, or any artist with nonzero net
+    supply gets a discontinuous drop in its stored price series.
     """
 
     anchor_cents: int
     anchor_target_cents: int
     glide_start_at: datetime
     glide_end_at: datetime
+    market_cents: int
 
 
 def listing_slope_uc() -> int:
@@ -229,4 +236,5 @@ def plan_reversion(
         anchor_target_cents=new_anchor_cents + move,
         glide_start_at=now,
         glide_end_at=now + timedelta(hours=REVERSION_GLIDE_HOURS),
+        market_cents=market_cents,
     )

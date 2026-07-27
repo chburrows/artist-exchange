@@ -38,8 +38,9 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ax.core.amm import reversion_move_cents
+from ax.core.amm import reversion_move_cents, spot_price_uc
 from ax.core.index import ArtistDayResult
+from ax.core.money import cents_to_uc, uc_to_cents_nearest
 from ax.db.models import (
     Artist,
     FlaggedArtist,
@@ -302,6 +303,59 @@ def test_reversion_moves_anchor_on_subsequent_day(
     assert [h.source for h in history] == ["listing", "reversion"]
     assert history[-1].fair_value_cents == day8_snap.fair_value_cents
     assert history[-1].market_price_cents == day7_snap.fair_value_cents
+
+
+def test_reversion_price_history_includes_supply_markup(
+    session: Session, make_artist: ArtistFactory
+) -> None:
+    """A `price_history` row written by reversion must record the true AMM
+    spot price (anchor + supply markup), not the bare anchor -- otherwise
+    any artist with nonzero net supply gets a discontinuous drop in its
+    stored price series even though the reversion itself moved
+    continuously (CLAUDE.md: "moves continuously, never a discrete
+    jump")."""
+    states = _seed_steady(session, make_artist, count=10, days=8)
+    day7 = _day(7)
+    run_recompute(session, day7, now=_now_for(day7))
+
+    artist = states[0].artist
+    session.refresh(artist)
+    user = User(username="reversion-buyer", email="reversion-buyer@example.com")
+    session.add(user)
+    session.flush()
+    session.add(
+        Transaction(
+            user_id=user.id,
+            artist_id=artist.id,
+            kind="BUY",
+            cash_delta_cents=-1000,
+            share_delta=50,
+            exec_price_cents=20,
+        )
+    )
+    session.flush()
+
+    day8 = _day(8)
+    states = _advance_all(session, states, day8)
+    run_recompute(session, day8, now=_now_for(day8))
+    session.refresh(artist)
+
+    day7_snap = _snapshot(session, artist.id, day7)
+    assert day7_snap is not None
+    assert artist.anchor_cents == day7_snap.fair_value_cents
+    assert artist.slope_microcents_per_share is not None
+
+    expected_market_cents = uc_to_cents_nearest(
+        spot_price_uc(cents_to_uc(artist.anchor_cents), artist.slope_microcents_per_share, 50)
+    )
+    assert expected_market_cents > day7_snap.fair_value_cents
+
+    history = session.scalars(
+        select(PriceHistory).where(PriceHistory.artist_id == artist.id).order_by(PriceHistory.id)
+    ).all()
+    assert history[-1].source == "reversion"
+    assert history[-1].net_supply == 50
+    assert history[-1].market_price_cents == expected_market_cents
 
 
 # --- idempotency ---------------------------------------------------------

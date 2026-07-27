@@ -563,7 +563,7 @@ def _apply_market_state(
     session.add(
         PriceHistory(
             artist_id=artist.id,
-            market_price_cents=plan.anchor_cents,
+            market_price_cents=plan.market_cents,
             fair_value_cents=fair_value_cents,
             net_supply=net_supply,
             source="reversion",
