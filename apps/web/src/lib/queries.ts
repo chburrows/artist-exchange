@@ -16,6 +16,7 @@ export type PortfolioResponse = components["schemas"]["PortfolioResponse"];
 export type EquityPoint = components["schemas"]["EquityPoint"];
 export type QuoteResponse = components["schemas"]["QuoteResponse"];
 export type TradeSide = components["schemas"]["TradeSide"];
+export type FlaggedArtistOut = components["schemas"]["FlaggedArtistOut"];
 
 function unwrap<T>(result: { data?: T; error?: unknown }): T {
   if (result.error) throw result.error;
@@ -172,6 +173,44 @@ export function useQuoteTrade(input: TradeQuoteInput | null) {
     queryFn: async (): Promise<QuoteResponse> => unwrap(await api.POST("/trades/quote", { body: input! })),
     enabled: input !== null,
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Admin-only oracle-manipulation review queue. `enabled` mirrors
+ * `usePortfolio`'s pattern -- callers pass `me.data?.is_admin` so the
+ * hook order stays stable while `useMe` is still resolving, and a
+ * non-admin never fires a request that would only 403. */
+export function useFlaggedArtists(enabled: boolean, includeCleared: boolean) {
+  return useQuery({
+    queryKey: ["flagged-artists", includeCleared],
+    queryFn: async (): Promise<FlaggedArtistOut[]> =>
+      unwrap(
+        await api.GET("/admin/flagged-artists", {
+          params: { query: { include_cleared: includeCleared } },
+        }),
+      ),
+    enabled,
+    // Keeps the open queue on screen while the cleared-history toggle
+    // loads its wider list, instead of blanking back to skeletons.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Clearing lifts the quarantine, but fair value only starts moving
+ * again at the *next* nightly recompute (`jobs/recompute.py`) -- nothing
+ * user-visible changes now, so only the queue itself is invalidated. */
+export function useClearFlag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (flag: { artist_id: number; as_of_date: string }) =>
+      unwrap(
+        await api.POST("/admin/flagged-artists/{artist_id}/{as_of_date}/clear", {
+          params: { path: { artist_id: flag.artist_id, as_of_date: flag.as_of_date } },
+        }),
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flagged-artists"] });
+    },
   });
 }
 

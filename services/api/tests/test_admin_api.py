@@ -33,6 +33,20 @@ def test_flagged_artists_requires_auth(client: TestClient) -> None:
     assert client.get("/admin/flagged-artists").status_code == 401
 
 
+def test_me_exposes_is_admin(
+    client: TestClient, session: Session, email_provider: FakeEmailProvider
+) -> None:
+    """The SPA's `/admin` route and its nav entry are gated on this field
+    (`useMe`), so it has to survive a signup round trip and flip with the
+    flag -- a stale `false` would hide the queue from a real admin."""
+    _signup(client, email_provider, "not-yet-admin")
+    assert client.get("/auth/me").json()["is_admin"] is False
+
+    _make_admin(session, "not-yet-admin")
+
+    assert client.get("/auth/me").json()["is_admin"] is True
+
+
 def test_flagged_artists_requires_admin(
     client: TestClient, email_provider: FakeEmailProvider
 ) -> None:

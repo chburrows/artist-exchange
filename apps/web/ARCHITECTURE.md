@@ -110,10 +110,18 @@ Carry forward the same route set — the product surface hasn't changed:
 
 ## Admin
 
-Role-gated, minimal to start: surface the Phase 3 quarantine queue
-(`flagged_artists`). Note the backend currently has no clearing UI anywhere
-(`PLAN.md`'s own follow-up) and quarantines never auto-clear. add a basic UI
-and acknowledge on the page that as of building there is no clear mechanism.
+Role-gated, minimal: surface the Phase 3 quarantine queue
+(`flagged_artists`), open and cleared, with a per-row clear action.
+
+The role comes from `is_admin` on `UserOut` (`useMe`) — added for this,
+since `UserOut` previously carried no role at all. **That gate is
+cosmetic**: it hides the nav entry and the queue, while `CurrentAdminDep`
+on every `/admin/*` route is the real one. `is_admin` has no self-service
+path; `ax promote-admin` is the only grant.
+
+Quarantines never auto-clear — an unattended flag freezes that artist's
+fair value indefinitely — so the page states that plainly, and states
+that a clear only takes effect at the next nightly recompute.
 
 ## Auth contract (backend already ships this — build the UI to match)
 

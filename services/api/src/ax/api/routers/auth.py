@@ -89,6 +89,11 @@ class UserOut(BaseModel):
     id: int
     username: str
     email: str
+    # The client's only source of role: `/admin` is gated on this in the
+    # SPA so a non-admin never sees the nav entry or the queue. It is a
+    # *cosmetic* gate -- `CurrentAdminDep` is the real one, and every
+    # `/admin/*` route still 403s regardless of what the client believes.
+    is_admin: bool
 
 
 class SignupRequest(BaseModel):
@@ -393,7 +398,7 @@ def consume_signup(
 
     _set_session_cookie(response, settings, raw_token, now)
     return SignupResponse(
-        user=UserOut(id=user.id, username=user.username, email=user.email),
+        user=UserOut(id=user.id, username=user.username, email=user.email, is_admin=user.is_admin),
         cash_cents=balance.cash_cents,
     )
 
@@ -413,7 +418,7 @@ def update_username(
             status_code=status.HTTP_409_CONFLICT, detail="username already taken"
         ) from exc
     db.commit()
-    return UserOut(id=user.id, username=user.username, email=user.email)
+    return UserOut(id=user.id, username=user.username, email=user.email, is_admin=user.is_admin)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -447,7 +452,7 @@ def logout(
 
 @router.get("/me")
 def me(user: CurrentUserDep) -> UserOut:
-    return UserOut(id=user.id, username=user.username, email=user.email)
+    return UserOut(id=user.id, username=user.username, email=user.email, is_admin=user.is_admin)
 
 
 @router.post("/magic-link", status_code=status.HTTP_202_ACCEPTED)
@@ -498,4 +503,6 @@ def consume_magic_link(
     db.commit()
 
     _set_session_cookie(response, settings, raw_token, now)
-    return ConsumeResponse(user=UserOut(id=user.id, username=user.username, email=user.email))
+    return ConsumeResponse(
+        user=UserOut(id=user.id, username=user.username, email=user.email, is_admin=user.is_admin)
+    )

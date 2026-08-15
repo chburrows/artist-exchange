@@ -645,6 +645,8 @@ export interface components {
             username: string;
             /** Email */
             email: string;
+            /** Is Admin */
+            is_admin: boolean;
         };
         /** UsernameUpdateRequest */
         UsernameUpdateRequest: {

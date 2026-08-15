@@ -11,6 +11,7 @@ import {
   HomeIcon,
   LogOutIcon,
   MoonIcon,
+  ShieldIcon,
   SunIcon,
   TrophyIcon,
   WalletIcon,
@@ -27,10 +28,10 @@ type NavItem = {
   match: (path: string) => boolean;
 };
 
-// Admin is intentionally absent: UserOut carries no role, so admin
-// gating (and its UI) is the step-5 concern -- the primary nav is the
-// four public surfaces the design ships. Artist detail highlights under
-// Discover, where it's reached from.
+// The four public surfaces the design ships. Artist detail highlights
+// under Discover, where it's reached from. Admin is appended per-render
+// for admins only (`ADMIN_NAV`) rather than living here, so a signed-out
+// or ordinary user never even renders the link.
 const NAV: NavItem[] = [
   { href: "/", label: "Home", icon: HomeIcon, match: (p) => p === "/" },
   {
@@ -52,6 +53,13 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith("/leaderboard"),
   },
 ];
+
+const ADMIN_NAV: NavItem = {
+  href: "/admin",
+  label: "Admin",
+  icon: ShieldIcon,
+  match: (p) => p.startsWith("/admin"),
+};
 
 function ThemeToggle({ className }: { className?: string }) {
   const { theme, toggleTheme } = useTheme();
@@ -92,6 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const portfolio = usePortfolio(loggedIn);
   const logout = useLogout();
   const cash = portfolio.data?.cash_cents ?? null;
+  const navItems = me.data?.is_admin ? [...NAV, ADMIN_NAV] : NAV;
 
   return (
     <div className="min-h-screen md:flex">
@@ -101,7 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <BrandMark size={22} />
         </Link>
         <nav className="flex flex-col gap-1">
-          {NAV.map((item) => {
+          {navItems.map((item) => {
             const active = item.match(pathname);
             const Icon = item.icon;
             return (
@@ -191,8 +200,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
 
         {/* Mobile bottom tab bar */}
-        <nav className="border-border bg-bg-alt/90 pb-safe fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t pt-1.5 backdrop-blur-md md:hidden">
-          {NAV.map((item) => {
+        {/* Both column counts are written out literally so Tailwind's
+            source scan emits them -- an interpolated `grid-cols-${n}`
+            would compile to nothing. */}
+        <nav
+          className={cn(
+            "border-border bg-bg-alt/90 pb-safe fixed inset-x-0 bottom-0 z-40 grid border-t pt-1.5 backdrop-blur-md md:hidden",
+            navItems.length === 5 ? "grid-cols-5" : "grid-cols-4",
+          )}
+        >
+          {navItems.map((item) => {
             const active = item.match(pathname);
             const Icon = item.icon;
             return (
