@@ -48,6 +48,8 @@ uv run ax reset                                  # drop + migrate + seed + the t
 uv run uvicorn ax.api.main:app --reload --port 8000  # FastAPI dev server
 pnpm dev                      # Next.js dev server
 pnpm build                    # static export
+pnpm format                   # Prettier, whole repo (Python is ruff's job — see .prettierignore)
+pnpm format:check             # what CI runs
 pnpm e2e                      # Playwright — resets the DB via `ax reset`, then drives a real browser
                                # against a real API + Postgres (apps/web/playwright.config.ts)
 ```

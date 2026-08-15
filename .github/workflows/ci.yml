@@ -219,6 +219,7 @@ jobs:
           enable-cache: true
       - run: pnpm install --frozen-lockfile
       - run: uv sync --locked
+      - run: pnpm format:check
       - run: pnpm --filter web lint
       - run: pnpm --filter web exec tsc --noEmit
       - run: pnpm --filter web build

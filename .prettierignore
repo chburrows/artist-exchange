@@ -1,0 +1,21 @@
+# Build output
+apps/web/.next/
+apps/web/out/
+apps/web/test-results/
+apps/web/playwright-report/
+
+# Generated, never hand-edited (CLAUDE.md). Mirrors eslint.config.mjs.
+apps/web/src/lib/schema.d.ts
+apps/web/public/sw.js
+
+# Lockfiles
+pnpm-lock.yaml
+uv.lock
+
+# Python — formatted by `ruff format`, not Prettier.
+.venv/
+services/
+
+# Prose is hand-maintained: CONCEPT.md and PLAN.md are product/build truth
+# and CLAUDE.md is instructions. Reflowing them adds blame noise for no gain.
+*.md
