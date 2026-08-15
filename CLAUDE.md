@@ -45,7 +45,7 @@ uv run ax fake-history --days 120 --seed 42   # synthetic metric_snapshots + rea
 uv run ax simulate-trades --users 50 --days 120  # random agents through the real AMM/ledger
 uv run ax reset                                  # drop + migrate + seed + the two above, in one command
 
-uv run uvicorn ax.api.main:app --reload --port 8000  # FastAPI dev server
+uv run uvicorn ax.api.main:app --reload --host 0.0.0.0 --port 8000  # FastAPI dev server (see Gotchas re: --host)
 pnpm dev                      # Next.js dev server
 pnpm build                    # static export
 pnpm format                   # Prettier, whole repo (Python is ruff's job — see .prettierignore)
@@ -102,6 +102,7 @@ These are rules, not preferences. Violating one is a bug even if tests pass.
 - **httpx logs full request URLs at INFO, and ours carry `api_key`.** `logging_config.py` exists only to suppress that. Call `configure_third_party_logging()` in any new entry point, or the Last.fm key lands in production logs.
 - **`ax snapshot` hits the live API and spends rate-limit budget.** Use `--limit` when smoke-testing; a full run is ~200 requests over ~52s.
 - **Postgres `now()` is transaction-*start* time, not statement time.** Combined with `SELECT ... FOR UPDATE`, it records when a trade *queued* rather than when it executed — which can invert the order of rows in a price series. Use `clock_timestamp()` for anything that timestamps an event inside a locked transaction. This is why `price_history` has a surrogate `id` key instead of `(artist_id, at)`; see PLAN.md and `tests/test_price_history_schema.py`.
+- **Dev on WSL2: always start uvicorn with `--host 0.0.0.0`.** Uvicorn defaults to `127.0.0.1`, which is WSL's *internal* loopback — a separate network stack from the Windows host's. A browser running on Windows cannot reach it, and WSL's localhost relay resets the connection rather than refusing it. Next.js binds all interfaces by default, so the symptom is asymmetric and misleading: the page at :3000 loads fine while every API call it makes dies with `ERR_CONNECTION_RESET`, which reads like a CORS or app bug rather than a bind-address one. Check `ss -lptn` — if :8000 shows `127.0.0.1` and :3000 shows `*`, that's the bug.
 
 ## Conventions
 

@@ -17,10 +17,14 @@ uv run ax reset               # seed artists + fake history + simulated trades
 ### Backend (FastAPI)
 
 ```bash
-uv run uvicorn ax.api.main:app --reload --port 8000
+uv run uvicorn ax.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 API docs at http://localhost:8000/docs.
+
+`--host 0.0.0.0` matters on WSL2. Uvicorn otherwise binds WSL's own loopback,
+which a browser on the Windows host cannot reach — the page at :3000 loads but
+every API call fails with `ERR_CONNECTION_RESET`.
 
 ### Frontend (Next.js)
 
