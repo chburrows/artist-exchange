@@ -148,7 +148,9 @@ export function ShareCard({ data, onClose }: { data: ShareCardData; onClose: () 
             />
           </div>
           <div className="bg-bg-alt py-3 text-center">
-            <span className="text-faint font-mono text-[0.65rem] tracking-wide">artistexchange.app</span>
+            <span className="text-faint font-mono text-[0.65rem] tracking-wide">
+              artistexchange.app
+            </span>
           </div>
         </div>
 
@@ -205,7 +207,11 @@ function Cell({
           ? "text-violet"
           : "text-foreground";
   return (
-    <div className={bordered ? "border-border border-x px-3 py-4 text-center" : "px-3 py-4 text-center"}>
+    <div
+      className={
+        bordered ? "border-border border-x px-3 py-4 text-center" : "px-3 py-4 text-center"
+      }
+    >
       <div className="text-faint mb-1 text-[0.62rem]">{label}</div>
       <div className={`font-mono text-sm font-bold tabular-nums ${color}`}>{value}</div>
     </div>
@@ -336,7 +342,13 @@ async function renderCanvas(data: ShareCardData): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }
 
-function drawArtistAvatar(ctx: CanvasRenderingContext2D, seed: string, x: number, y: number, size: number) {
+function drawArtistAvatar(
+  ctx: CanvasRenderingContext2D,
+  seed: string,
+  x: number,
+  y: number,
+  size: number,
+) {
   const { bg, facets } = artistAvatar(seed);
   const s = size / 100;
   ctx.save();
@@ -364,7 +376,13 @@ function drawArtistAvatar(ctx: CanvasRenderingContext2D, seed: string, x: number
   ctx.restore();
 }
 
-function drawPentagon(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) {
+function drawPentagon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+) {
   const pts = [
     [10, 1],
     [18, 7],
@@ -399,7 +417,14 @@ function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number,
   ctx.stroke();
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -409,7 +434,14 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-function roundRectBottom(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRectBottom(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(x + w, y);

@@ -3,7 +3,13 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/errors";
@@ -47,7 +53,9 @@ export function SignInPanel({
         </DialogHeader>
 
         {requestLink.isSuccess ? (
-          <p className="text-sm text-positive">If that email is registered, a sign-in link is on its way.</p>
+          <p className="text-sm text-positive">
+            If that email is registered, a sign-in link is on its way.
+          </p>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">

@@ -77,7 +77,8 @@ export function useLogout() {
 
 export function useRequestMagicLink() {
   return useMutation({
-    mutationFn: async (email: string) => unwrap(await api.POST("/auth/magic-link", { body: { email } })),
+    mutationFn: async (email: string) =>
+      unwrap(await api.POST("/auth/magic-link", { body: { email } })),
   });
 }
 
@@ -170,7 +171,8 @@ export type TradeQuoteInput = { artist_slug: string; side: TradeSide; shares: nu
 export function useQuoteTrade(input: TradeQuoteInput | null) {
   return useQuery({
     queryKey: ["quote", input?.artist_slug, input?.side, input?.shares],
-    queryFn: async (): Promise<QuoteResponse> => unwrap(await api.POST("/trades/quote", { body: input! })),
+    queryFn: async (): Promise<QuoteResponse> =>
+      unwrap(await api.POST("/trades/quote", { body: input! })),
     enabled: input !== null,
     placeholderData: keepPreviousData,
   });

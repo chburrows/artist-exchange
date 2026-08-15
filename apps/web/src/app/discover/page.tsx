@@ -37,7 +37,9 @@ function applySort(artists: ArtistOut[], sort: SortId): ArtistOut[] {
         .filter((a) => a.spot_price_cents < 1000)
         .sort((a, b) => (b.daily_change_pct ?? 0) - (a.daily_change_pct ?? 0));
     case "new":
-      return [...artists].sort((a, b) => new Date(b.listed_at).getTime() - new Date(a.listed_at).getTime());
+      return [...artists].sort(
+        (a, b) => new Date(b.listed_at).getTime() - new Date(a.listed_at).getTime(),
+      );
     case "az":
       return [...artists].sort((a, b) => a.name.localeCompare(b.name));
     default:
@@ -115,7 +117,9 @@ export default function DiscoverPage() {
         ))}
       </div>
 
-      {artists.isError && <p className="text-destructive text-sm">Couldn&apos;t load artists — try again.</p>}
+      {artists.isError && (
+        <p className="text-destructive text-sm">Couldn&apos;t load artists — try again.</p>
+      )}
       {artists.data && rows.length === 0 && (
         <p className="text-muted-foreground py-8 text-center text-sm">
           {query ? `No artists match “${query}”.` : "No artists match this filter right now."}
@@ -124,8 +128,12 @@ export default function DiscoverPage() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {artists.isLoading
-          ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-[124px] w-full rounded-2xl" />)
-          : rows.map((artist) => <ArtistCard key={artist.slug} artist={artist} className="w-full" />)}
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-[124px] w-full rounded-2xl" />
+            ))
+          : rows.map((artist) => (
+              <ArtistCard key={artist.slug} artist={artist} className="w-full" />
+            ))}
       </div>
     </div>
   );

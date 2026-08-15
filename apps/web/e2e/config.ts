@@ -15,4 +15,5 @@ export const WEB_BASE_URL = `http://localhost:${WEB_PORT}`;
 export const EMAIL_LOG_PATH = process.env.EMAIL_LOG_PATH ?? "/tmp/ax-e2e-email-log.jsonl";
 
 export const DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgresql+psycopg://postgres:postgres@localhost:5432/artist_exchange";
+  process.env.DATABASE_URL ??
+  "postgresql+psycopg://postgres:postgres@localhost:5432/artist_exchange";

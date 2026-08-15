@@ -27,8 +27,14 @@ export function PortfolioValueChart({ points }: { points: EquityPoint[] }) {
     const demoMax = Math.max(...DEMO_SHAPE);
     return (
       <div className="border-border bg-card flex flex-col gap-2 rounded-2xl border p-4">
-        <p className="text-faint text-xs font-bold tracking-wide uppercase">Demo — not your real history</p>
-        <svg viewBox={`0 0 ${W} ${H}`} className="h-28 w-full opacity-40" preserveAspectRatio="none">
+        <p className="text-faint text-xs font-bold tracking-wide uppercase">
+          Demo — not your real history
+        </p>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="h-28 w-full opacity-40"
+          preserveAspectRatio="none"
+        >
           <path
             d={buildLinePath(DEMO_SHAPE, demoMin, demoMax, DIMS)}
             fill="none"
@@ -60,7 +66,9 @@ export function PortfolioValueChart({ points }: { points: EquityPoint[] }) {
     <div className="border-border bg-card flex flex-col gap-3 rounded-2xl border p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-heading text-2xl font-bold tabular-nums">{formatCents(latest.equity_cents)}</p>
+          <p className="font-heading text-2xl font-bold tabular-nums">
+            {formatCents(latest.equity_cents)}
+          </p>
           <p className="text-faint mt-0.5 text-xs">Equity · as of {latest.as_of_date}</p>
         </div>
         <ChangeBadge pct={changePct} size="md" />

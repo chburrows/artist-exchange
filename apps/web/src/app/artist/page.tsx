@@ -59,7 +59,8 @@ function ArtistPageContent() {
 
   const { artist, points } = history.data;
   const spot = artist.spot_price_cents;
-  const fairCents = [...points].reverse().find((p) => p.fair_value_cents !== null)?.fair_value_cents ?? null;
+  const fairCents =
+    [...points].reverse().find((p) => p.fair_value_cents !== null)?.fair_value_cents ?? null;
   const divergencePct = fairCents !== null && spot > 0 ? ((fairCents - spot) / spot) * 100 : null;
 
   return (
@@ -132,8 +133,8 @@ function ArtistPageContent() {
           </details>
 
           <p className="text-faint text-xs leading-relaxed">
-            {artist.name} is not affiliated with or endorsed by Artist Exchange. Prices are play money and
-            reflect public popularity signals, not real-world endorsement.
+            {artist.name} is not affiliated with or endorsed by Artist Exchange. Prices are play
+            money and reflect public popularity signals, not real-world endorsement.
           </p>
         </div>
       </div>

@@ -19,7 +19,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 // runs under plain Node (before `playwright test`) and can't load
 // TypeScript without extra tooling for three constants.
 const DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgresql+psycopg://postgres:postgres@localhost:5432/artist_exchange";
+  process.env.DATABASE_URL ??
+  "postgresql+psycopg://postgres:postgres@localhost:5432/artist_exchange";
 const EMAIL_LOG_PATH = process.env.EMAIL_LOG_PATH ?? "/tmp/ax-e2e-email-log.jsonl";
 
 fs.rmSync(EMAIL_LOG_PATH, { force: true });

@@ -51,7 +51,8 @@ function VerifySignupContent() {
         { token, username: retryUsername },
         {
           onSuccess: () => router.replace("/"),
-          onError: (error) => setShowConflictForm(errorMessage(error, "") === USERNAME_TAKEN_DETAIL),
+          onError: (error) =>
+            setShowConflictForm(errorMessage(error, "") === USERNAME_TAKEN_DETAIL),
         },
       );
     };

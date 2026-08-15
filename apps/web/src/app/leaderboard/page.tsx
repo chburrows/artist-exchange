@@ -46,10 +46,17 @@ function Podium({ top }: { top: Entry[] }) {
               ringColor={RING[e.rank - 1] ?? "var(--border-strong)"}
             />
             <span className="max-w-[84px] truncate text-xs font-bold sm:text-sm">{e.username}</span>
-            <span className={cn("font-mono text-xs font-bold tabular-nums sm:text-sm", statTone(e.statBps))}>
+            <span
+              className={cn(
+                "font-mono text-xs font-bold tabular-nums sm:text-sm",
+                statTone(e.statBps),
+              )}
+            >
               {formatBps(e.statBps)}
             </span>
-            <span className="text-faint font-mono text-[0.65rem] font-bold tabular-nums">#{e.rank}</span>
+            <span className="text-faint font-mono text-[0.65rem] font-bold tabular-nums">
+              #{e.rank}
+            </span>
           </div>
         );
       })}
@@ -65,7 +72,9 @@ function Row({ entry }: { entry: Entry }) {
         entry.isYou ? "border-primary bg-primary-soft" : "border-border bg-card",
       )}
     >
-      <span className="text-faint w-6 shrink-0 font-mono text-xs font-bold tabular-nums">{entry.rank}</span>
+      <span className="text-faint w-6 shrink-0 font-mono text-xs font-bold tabular-nums">
+        {entry.rank}
+      </span>
       <Avatar seed={entry.username} entity="user" size={32} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">
@@ -104,10 +113,13 @@ function Board({
       </div>
     );
   }
-  if (isError) return <p className="text-destructive text-sm">Couldn&apos;t load the leaderboard.</p>;
+  if (isError)
+    return <p className="text-destructive text-sm">Couldn&apos;t load the leaderboard.</p>;
   if (noSnapshot) {
     return (
-      <p className="text-muted-foreground text-sm">No nightly snapshot has run yet — check back tomorrow.</p>
+      <p className="text-muted-foreground text-sm">
+        No nightly snapshot has run yet — check back tomorrow.
+      </p>
     );
   }
 

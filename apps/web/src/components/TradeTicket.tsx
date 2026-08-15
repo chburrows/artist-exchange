@@ -25,7 +25,11 @@ export function TradeTicket({
 }) {
   const [side, setSide] = useState<TradeSide>("buy");
   const [shares, setShares] = useState(1);
-  const [executed, setExecuted] = useState<{ shares: number; side: TradeSide; execPriceCents: number } | null>(null);
+  const [executed, setExecuted] = useState<{
+    shares: number;
+    side: TradeSide;
+    execPriceCents: number;
+  } | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   const portfolio = usePortfolio(true);
@@ -41,7 +45,11 @@ export function TradeTicket({
       { artist_slug: artistSlug, side, shares, idempotency_key: key },
       {
         onSuccess: (data) => {
-          setExecuted({ shares: data.shares, side: data.side, execPriceCents: data.exec_price_cents });
+          setExecuted({
+            shares: data.shares,
+            side: data.side,
+            execPriceCents: data.exec_price_cents,
+          });
           setIdempotencyKey(null);
         },
       },
@@ -97,7 +105,9 @@ export function TradeTicket({
             onClick={() => changeSide("sell")}
             className={cn(
               "press min-h-9 flex-1 rounded-lg text-sm font-bold transition-colors",
-              side === "sell" ? "bg-destructive text-destructive-foreground" : "text-muted-foreground",
+              side === "sell"
+                ? "bg-destructive text-destructive-foreground"
+                : "text-muted-foreground",
             )}
           >
             Sell
@@ -135,10 +145,17 @@ export function TradeTicket({
         </div>
       </div>
 
-      {quoteQuery.isError && <p className="text-destructive text-xs">{errorMessage(quoteQuery.error)}</p>}
+      {quoteQuery.isError && (
+        <p className="text-destructive text-xs">{errorMessage(quoteQuery.error)}</p>
+      )}
 
       {quote && (
-        <div className={cn("bg-secondary flex flex-col gap-1.5 rounded-xl p-3 text-sm", quoteQuery.isFetching && "opacity-60")}>
+        <div
+          className={cn(
+            "bg-secondary flex flex-col gap-1.5 rounded-xl p-3 text-sm",
+            quoteQuery.isFetching && "opacity-60",
+          )}
+        >
           <details className="group">
             <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold [&::-webkit-details-marker]:hidden">
               <ChevronDownIcon className="transition-transform duration-200 group-open:rotate-180" />
@@ -177,7 +194,9 @@ export function TradeTicket({
           )}
         </div>
       )}
-      {executeTrade.isError && <p className="text-destructive text-xs">{errorMessage(executeTrade.error)}</p>}
+      {executeTrade.isError && (
+        <p className="text-destructive text-xs">{errorMessage(executeTrade.error)}</p>
+      )}
 
       {executed && (
         <p className="text-positive text-sm font-semibold">
@@ -214,7 +233,12 @@ function Row({
       >
         {label}
       </span>
-      <span className={cn("font-mono tabular-nums", strong ? "font-bold" : muted ? "text-muted-foreground" : "")}>
+      <span
+        className={cn(
+          "font-mono tabular-nums",
+          strong ? "font-bold" : muted ? "text-muted-foreground" : "",
+        )}
+      >
         {value}
       </span>
     </div>

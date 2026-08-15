@@ -73,11 +73,7 @@ function ThemeToggle({ className }: { className?: string }) {
         className,
       )}
     >
-      {theme === "dark" ? (
-        <SunIcon className="text-base" />
-      ) : (
-        <MoonIcon className="text-base" />
-      )}
+      {theme === "dark" ? <SunIcon className="text-base" /> : <MoonIcon className="text-base" />}
     </button>
   );
 }
@@ -139,9 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2.5">
               <Avatar seed={me.data.username} entity="user" size={34} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold">
-                  @{me.data.username}
-                </div>
+                <div className="truncate text-sm font-bold">@{me.data.username}</div>
                 {cash !== null && (
                   <div className="text-primary font-mono text-xs font-bold tabular-nums">
                     {formatCents(cash)}

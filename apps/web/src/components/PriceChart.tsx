@@ -114,7 +114,11 @@ export function PriceChart({
   const hoverFx = hoverIdx !== null ? (xAt(hoverIdx) / W) * 100 : 0;
   const hoverFy = hover ? (yAt(hover.market_price_cents) / H) * 100 : 0;
   const tooltipTransform =
-    hoverFx < 18 ? "translateX(-4px)" : hoverFx > 82 ? "translateX(-100%) translateX(4px)" : "translateX(-50%)";
+    hoverFx < 18
+      ? "translateX(-4px)"
+      : hoverFx > 82
+        ? "translateX(-100%) translateX(4px)"
+        : "translateX(-50%)";
 
   return (
     <div className="border-border bg-card flex flex-col gap-3 rounded-2xl border p-4">
@@ -124,7 +128,12 @@ export function PriceChart({
             {formatCents(headlineCents)}
           </p>
           <p className="mt-0.5 flex items-center gap-2 text-xs">
-            <span className={cn("font-mono font-bold tabular-nums", up ? "text-positive" : "text-destructive")}>
+            <span
+              className={cn(
+                "font-mono font-bold tabular-nums",
+                up ? "text-positive" : "text-destructive",
+              )}
+            >
               {formatPct(changePct)}
             </span>
             <span className="text-faint">market price</span>
@@ -227,11 +236,13 @@ export function PriceChart({
 
       <div className="text-faint flex items-center gap-4 text-[0.65rem] font-mono">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-0.5 w-3 rounded-full" style={{ background: lineColor }} /> price
+          <span className="inline-block h-0.5 w-3 rounded-full" style={{ background: lineColor }} />{" "}
+          price
         </span>
         {showFair && (
           <span className="flex items-center gap-1.5">
-            <span className="border-violet inline-block w-3 border-t-2 border-dashed" /> fair-value index
+            <span className="border-violet inline-block w-3 border-t-2 border-dashed" /> fair-value
+            index
           </span>
         )}
       </div>

@@ -106,7 +106,11 @@ export default function PortfolioPage() {
           <Avatar seed={me.data.username} entity="user" size={24} />@{me.data.username}
         </button>
       </div>
-      <RenameUsernameDialog currentUsername={me.data.username} open={renameOpen} onOpenChange={setRenameOpen} />
+      <RenameUsernameDialog
+        currentUsername={me.data.username}
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+      />
 
       {history.isLoading ? (
         <Skeleton className="h-44 w-full rounded-2xl" />
@@ -143,7 +147,9 @@ export default function PortfolioPage() {
                 </p>
                 <p className="truncate text-sm font-bold">
                   {best.name}{" "}
-                  <span className="text-positive font-mono tabular-nums">+{best.gainPct.toFixed(1)}%</span>
+                  <span className="text-positive font-mono tabular-nums">
+                    +{best.gainPct.toFixed(1)}%
+                  </span>
                 </p>
               </div>
               <button
@@ -161,7 +167,10 @@ export default function PortfolioPage() {
             {portfolio.data.positions.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 No positions yet.{" "}
-                <Link href="/discover" className="text-primary font-bold underline underline-offset-2">
+                <Link
+                  href="/discover"
+                  className="text-primary font-bold underline underline-offset-2"
+                >
                   Discover an artist
                 </Link>{" "}
                 to make your first trade.
@@ -180,7 +189,8 @@ export default function PortfolioPage() {
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-bold">{p.artist_name}</span>
                         <span className="text-faint font-mono text-[0.7rem] tabular-nums">
-                          {p.shares} share{p.shares === 1 ? "" : "s"} · avg cost {formatCents(p.avg_cost_cents)}
+                          {p.shares} share{p.shares === 1 ? "" : "s"} · avg cost{" "}
+                          {formatCents(p.avg_cost_cents)}
                         </span>
                       </div>
                       <div className="text-right">

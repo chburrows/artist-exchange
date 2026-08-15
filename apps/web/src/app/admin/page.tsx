@@ -82,7 +82,9 @@ function FlagRow({ flag, siblingOpen }: { flag: FlaggedArtistOut; siblingOpen: n
         >
           {flag.artist_slug}
         </Link>
-        <span className="text-faint font-mono text-xs font-bold tabular-nums">{flag.as_of_date}</span>
+        <span className="text-faint font-mono text-xs font-bold tabular-nums">
+          {flag.as_of_date}
+        </span>
       </div>
 
       <ReasonChips reason={flag.reason} />
@@ -112,9 +114,8 @@ function FlagRow({ flag, siblingOpen }: { flag: FlaggedArtistOut; siblingOpen: n
               discovers a night later. */}
           {siblingOpen > 0 && (
             <p className="text-muted-foreground text-xs">
-              This artist has {siblingOpen} other open{" "}
-              {siblingOpen === 1 ? "flag" : "flags"} — it stays quarantined until every one is
-              cleared.
+              This artist has {siblingOpen} other open {siblingOpen === 1 ? "flag" : "flags"} — it
+              stays quarantined until every one is cleared.
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -227,11 +228,11 @@ export default function AdminPage() {
           ARCHITECTURE.md, not incidental copy. */}
       <div className="border-border bg-card text-muted-foreground rounded-2xl border p-4 text-xs leading-relaxed">
         A flagged artist is <strong className="text-foreground">quarantined</strong>: its published
-        index score and fair value are held at the previous night&apos;s values while trading continues
-        normally. Quarantines never expire on their own. A flag is one night&apos;s detection, and an
-        artist stays quarantined while <em>any</em> of its flags is open — so clearing the last open
-        flag for an artist is what lifts it, and fair value only starts moving again at the next
-        nightly recompute.
+        index score and fair value are held at the previous night&apos;s values while trading
+        continues normally. Quarantines never expire on their own. A flag is one night&apos;s
+        detection, and an artist stays quarantined while <em>any</em> of its flags is open — so
+        clearing the last open flag for an artist is what lifts it, and fair value only starts
+        moving again at the next nightly recompute.
       </div>
 
       <div className="bg-secondary flex gap-1 rounded-xl p-1">
@@ -246,7 +247,9 @@ export default function AdminPage() {
             aria-pressed={includeCleared === t.id}
             className={cn(
               "press min-h-10 flex-1 rounded-lg text-sm font-bold transition-colors",
-              includeCleared === t.id ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+              includeCleared === t.id
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground",
             )}
           >
             {t.label}
@@ -264,12 +267,17 @@ export default function AdminPage() {
         <p className="text-destructive text-sm">Couldn&apos;t load the review queue.</p>
       ) : rows.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
-          {includeCleared ? "No artist has ever been flagged." : "Nothing quarantined — the queue is clear."}
+          {includeCleared
+            ? "No artist has ever been flagged."
+            : "Nothing quarantined — the queue is clear."}
         </p>
       ) : (
         <>
           <p className="text-faint text-xs font-bold">
-            {openCount} open{includeCleared && rows.length > openCount ? ` · ${rows.length - openCount} cleared` : ""}
+            {openCount} open
+            {includeCleared && rows.length > openCount
+              ? ` · ${rows.length - openCount} cleared`
+              : ""}
           </p>
           <ul className="flex flex-col gap-3">
             {rows.map((flag) => (

@@ -63,9 +63,9 @@ export function OnboardingScreen() {
         <BrandMark size={44} withWordmark={false} className="animate-pulse-glow" />
         <h1 className="font-heading text-2xl font-bold">Check your inbox</h1>
         <p className="text-muted-foreground text-sm leading-relaxed">
-          We sent a confirmation link to <span className="text-foreground font-bold">{checkInboxFor}</span>.
-          Tap it to finish creating your account and claim your {formatCents(STARTING_BALANCE_CENTS)} of play
-          money.
+          We sent a confirmation link to{" "}
+          <span className="text-foreground font-bold">{checkInboxFor}</span>. Tap it to finish
+          creating your account and claim your {formatCents(STARTING_BALANCE_CENTS)} of play money.
         </p>
         <p className="text-faint text-xs">No password, no code to type — just the link.</p>
       </div>
@@ -86,11 +86,14 @@ export function OnboardingScreen() {
           before they blow up.
         </h1>
         <p className="text-muted-foreground max-w-xl text-sm leading-relaxed sm:text-base">
-          Trade shares of emerging artists against a live popularity index. Being early is the whole game —
-          and now it&apos;s provable.
+          Trade shares of emerging artists against a live popularity index. Being early is the whole
+          game — and now it&apos;s provable.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-2 flex w-full max-w-sm flex-col gap-3 text-left">
+        <form
+          onSubmit={handleSubmit}
+          className="mt-2 flex w-full max-w-sm flex-col gap-3 text-left"
+        >
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -150,7 +153,11 @@ export function OnboardingScreen() {
                   <span
                     className={cn(
                       "font-mono text-[0.72rem] font-semibold tabular-nums",
-                      dir === "up" ? "text-positive" : dir === "down" ? "text-destructive" : "text-faint",
+                      dir === "up"
+                        ? "text-positive"
+                        : dir === "down"
+                          ? "text-destructive"
+                          : "text-faint",
                     )}
                   >
                     {a.daily_change_pct === null ? "—" : formatPct(a.daily_change_pct)}

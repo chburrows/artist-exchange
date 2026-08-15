@@ -2,7 +2,14 @@ import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { API_BASE_URL, API_PORT, DATABASE_URL, EMAIL_LOG_PATH, WEB_BASE_URL, WEB_PORT } from "./e2e/config";
+import {
+  API_BASE_URL,
+  API_PORT,
+  DATABASE_URL,
+  EMAIL_LOG_PATH,
+  WEB_BASE_URL,
+  WEB_PORT,
+} from "./e2e/config";
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 

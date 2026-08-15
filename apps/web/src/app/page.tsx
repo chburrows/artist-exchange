@@ -9,12 +9,7 @@ import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CompassIcon, SparkIcon, TrophyIcon } from "@/components/icons";
 import type { ArtistOut } from "@/lib/queries";
-import {
-  useArtists,
-  useMe,
-  usePortfolioHistory,
-  useScoutLeaderboard,
-} from "@/lib/queries";
+import { useArtists, useMe, usePortfolioHistory, useScoutLeaderboard } from "@/lib/queries";
 
 function Rail({
   title,
@@ -37,7 +32,9 @@ function Rail({
       </div>
       <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
         {loading
-          ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[124px] w-[160px] shrink-0 rounded-2xl" />)
+          ? Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-[124px] w-[160px] shrink-0 rounded-2xl" />
+            ))
           : artists.map((artist) => <ArtistCard key={artist.slug} artist={artist} />)}
       </div>
     </section>
@@ -109,7 +106,9 @@ export default function HomePage() {
             {scoutRank !== null ? `#${scoutRank}` : "—"}
           </span>
           <span className="text-muted-foreground text-xs">
-            {scoutRank !== null ? "Gains made while artists were still small" : "Trade to earn a rank"}
+            {scoutRank !== null
+              ? "Gains made while artists were still small"
+              : "Trade to earn a rank"}
           </span>
         </Link>
       </div>
@@ -129,8 +128,18 @@ export default function HomePage() {
         </Link>
       </div>
 
-      <Rail title="Fastest growing, under $10" href="/discover" artists={fastestUnder10} loading={artists.isLoading} />
-      <Rail title="Biggest movers today" href="/discover" artists={movers} loading={artists.isLoading} />
+      <Rail
+        title="Fastest growing, under $10"
+        href="/discover"
+        artists={fastestUnder10}
+        loading={artists.isLoading}
+      />
+      <Rail
+        title="Biggest movers today"
+        href="/discover"
+        artists={movers}
+        loading={artists.isLoading}
+      />
       <Rail title="New listings" href="/discover" artists={fresh} loading={artists.isLoading} />
     </div>
   );

@@ -139,8 +139,7 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 10px);
 
-  --font-heading:
-    var(--font-heading-family), var(--font-body-family), sans-serif;
+  --font-heading: var(--font-heading-family), var(--font-body-family), sans-serif;
   --font-body: var(--font-body-family), sans-serif;
   --font-mono: var(--font-mono-family), ui-monospace, monospace;
 }
