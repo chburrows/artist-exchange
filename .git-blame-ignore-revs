@@ -1,0 +1,8 @@
+# Commits to skip in `git blame` — mechanical reformats only, never a
+# commit that changed behavior. GitHub honors this file automatically;
+# locally it needs one-time opt-in:
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Apply Prettier to the repo
+3403433fa9d4361f2d7afb2f44c00ec9b7aba336
