@@ -99,6 +99,7 @@ right, then set these variables:
 | `INTERNAL_JOB_TOKEN` | `openssl rand -hex 32` — keep this value, GitHub needs it too |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `ENVIRONMENT` | `production` |
+| `PORT` | `8000` — the port the container listens on, and the custom domain's target port |
 | `WEB_ORIGIN` | the web service's public URL — leave a placeholder for now, come back and set it once step 3 below gives you the real one, then redeploy api |
 
 Then generate a public domain for the service and note the URL — this is
@@ -236,6 +237,49 @@ forensics found no sign of use. If it happens again:
   suspend the old one.
 - `railway variables --json` prints **resolved** values, so it can't tell
   a `${{reference}}` from a pasted literal. Check the dashboard.
+
+## Hibernating production
+
+Railway has no "pause". To stop paying while not developing, cancel the
+Hobby plan (Billing → Active Plan → Cancel Plan): the workspace drops to
+the Free plan and Railway stops every deployment. Railway documents Hobby
+volumes as deleted **60 days after cancellation**, so treat the project as
+possibly gone and keep your own dump.
+
+**Currently hibernated** since 2026-10-28 (plan active until 2026-11-18).
+The verified dump and the full restore notes (region, image, variable
+names, domains, CNAME targets) are in `~/ax-backups/` on the dev machine,
+outside the repo — the dump contains user emails, and this repo is public.
+
+To hibernate:
+
+1. Add a temporary TCP proxy to Postgres and dump with a **`postgres:18`
+   client** (host tools are v14, Compose is v16 — both too old for the
+   server):
+   `docker run --rm -e DBURL -v ~/ax-backups:/out postgres:18 sh -c 'pg_dump "$DBURL" -Fc --no-owner --no-acl -f /out/artist-exchange-$(date +%F).dump'`
+2. Restore it into a throwaway `postgres:18` container and compare row
+   counts with production. Then delete the TCP proxy.
+3. `gh workflow disable nightly-snapshot.yml`, then cancel the plan.
+
+The cost is a permanent gap in `metric_snapshots`: there is no backfill
+(see "GitHub Actions secrets" above).
+
+To resume:
+
+1. **Project still there:** upgrade to Hobby, then redeploy Postgres first
+   (check `SELECT max(as_of_date), count(*) FROM metric_snapshots`), then
+   api, then web. Check both custom domains are active.
+2. **Project gone:** rebuild per "Railway deploy" above, in region `sfo`.
+   After creating Postgres and **before** api's first deploy, add a
+   temporary TCP proxy, `pg_restore --no-owner --no-acl -d "$DBURL"` the
+   dump (again with a `postgres:18` client), then delete the proxy. Skip
+   `ax seed-artists`. Re-add both custom domains and point the two
+   Cloudflare CNAMEs at the new targets Railway shows — the URL variables
+   and GitHub's `API_BASE_URL` all use the custom domains, so they stay
+   unchanged. Set a new `INTERNAL_JOB_TOKEN` in both places.
+3. Run the checks in "Verifying the deploy", then
+   `gh workflow enable nightly-snapshot.yml`. Index scores come back after
+   about 5–9 nights, once the growth lookback has history again.
 
 ## Verifying the setup
 
