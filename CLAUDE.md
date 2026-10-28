@@ -54,7 +54,7 @@ pnpm e2e                      # Playwright — resets the DB via `ax reset`, the
                                # against a real API + Postgres (apps/web/playwright.config.ts)
 ```
 
-No `psql` on the host — use `docker compose exec postgres psql -U postgres artist_exchange`.
+Host `psql` is v14 (the server is 16 locally, 18 on Railway). For the local DB, prefer `docker compose exec postgres psql -U postgres artist_exchange`, which matches the server version. Production Postgres has no public port by default — see SETUP.md before reaching for `railway connect`.
 
 ## Layout
 

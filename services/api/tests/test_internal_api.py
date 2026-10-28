@@ -5,7 +5,7 @@ protection is a bearer token, so the auth tests here are load-bearing
 rather than box-ticking.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -83,23 +83,11 @@ def test_snapshot_succeeds_with_a_valid_token(
     assert total_rows(session) == 2
 
 
-def test_as_of_override_is_honored(
-    client: TestClient,
-    session: Session,
-    make_artist: ArtistFactory,
-    auth_headers: dict[str, str],
-) -> None:
-    """Backfills and re-running a failed night both depend on this."""
-    make_artist("Wednesday")
-
-    response = client.post(
-        "/internal/jobs/snapshot", params={"as_of": "2026-01-15"}, headers=auth_headers
+def values_on(session: Session, as_of: str) -> list[int]:
+    stmt = select(MetricSnapshot.value).where(
+        MetricSnapshot.as_of_date == date.fromisoformat(as_of)
     )
-
-    assert response.json()["as_of_date"] == "2026-01-15"
-    stored = session.scalars(select(MetricSnapshot)).first()
-    assert stored is not None
-    assert stored.as_of_date.isoformat() == "2026-01-15"
+    return list(session.scalars(stmt))
 
 
 def test_defaults_to_today_utc(
@@ -122,11 +110,52 @@ def test_endpoint_is_idempotent(
     takes."""
     make_artist("Wednesday")
 
-    client.post("/internal/jobs/snapshot", params={"as_of": "2026-07-18"}, headers=auth_headers)
-    first = total_rows(session)
-    client.post("/internal/jobs/snapshot", params={"as_of": "2026-07-18"}, headers=auth_headers)
+    client.post("/internal/jobs/snapshot", headers=auth_headers)
+    # Keyed on the response's date, not a second clock read, so a run that
+    # straddles UTC midnight cannot flake this.
+    as_of = client.post("/internal/jobs/snapshot", headers=auth_headers).json()["as_of_date"]
 
-    assert total_rows(session) == first
+    assert len(values_on(session, as_of)) == 2
+
+
+def test_todays_rerun_corrects_a_stale_value(
+    client: TestClient,
+    session: Session,
+    provider: FakeProvider,
+    make_artist: ArtistFactory,
+    auth_headers: dict[str, str],
+) -> None:
+    """The retried nightly run re-snapshots today and relies on DO UPDATE to
+    fix a partial first attempt. The as_of guard must not break that."""
+    make_artist("Wednesday")
+    provider.metrics["Wednesday"] = {"listeners": 100}
+    client.post("/internal/jobs/snapshot", headers=auth_headers)
+
+    provider.metrics["Wednesday"] = {"listeners": 250}
+    as_of = client.post("/internal/jobs/snapshot", headers=auth_headers).json()["as_of_date"]
+
+    assert values_on(session, as_of) == [250]
+
+
+@pytest.mark.parametrize("as_of", ["2026-01-15", "2999-01-01"], ids=["past", "future"])
+def test_as_of_other_than_today_is_rejected(
+    client: TestClient,
+    session: Session,
+    provider: FakeProvider,
+    make_artist: ArtistFactory,
+    auth_headers: dict[str, str],
+    as_of: str,
+) -> None:
+    """The stolen-token path. Last.fm reports only current counts, so any
+    other date would plant today's numbers in the series — overwriting real
+    history, or filling a gap the growth window then reads as the past."""
+    make_artist("Wednesday")
+
+    response = client.post("/internal/jobs/snapshot", params={"as_of": as_of}, headers=auth_headers)
+
+    assert response.status_code == 422
+    assert total_rows(session) == 0
+    assert provider.calls == []
 
 
 def test_aborted_run_returns_non_2xx(

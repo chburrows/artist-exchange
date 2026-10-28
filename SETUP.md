@@ -70,6 +70,12 @@ Add the managed Postgres plugin to the project. It exposes a
 `DATABASE_URL` that the api service references — do not copy the value,
 reference it, so a credential rotation does not silently break the api.
 
+**Keep the database private.** Do not leave a TCP proxy (public
+networking) on the Postgres service. The api reaches it over the private
+network; a proxy only exists so a human can run `railway connect
+Postgres`. Add one for the duration of that task, then delete it. Railway
+assigns a new port each time, so nothing stale lingers.
+
 ### 2. api
 
 Create a service from this GitHub repo. Railway reads
@@ -86,10 +92,9 @@ right, then set these variables:
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | reference the Postgres service's variable |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (a reference, never a pasted value) |
 | `LASTFM_API_KEY` | from `secrets.env` |
-| `LASTFM_SHARED_SECRET` | from `secrets.env` |
-| `RESEND_API_KEY` | from the Resend dashboard |
+| `RESEND_API_KEY` | from the Resend dashboard — a **sending-access** key restricted to the domain, not full access |
 | `EMAIL_FROM_ADDRESS` | `Artist Exchange <noreply@artistexchange.chburrows.com>` — domain is already verified in Resend |
 | `INTERNAL_JOB_TOKEN` | `openssl rand -hex 32` — keep this value, GitHub needs it too |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
@@ -98,6 +103,10 @@ right, then set these variables:
 
 Then generate a public domain for the service and note the URL — this is
 `NEXT_PUBLIC_API_BASE_URL` for step 3.
+
+`LASTFM_SHARED_SECRET` is deliberately **not** set in Railway. The app
+only calls unsigned methods and never reads it; a secret the app does not
+need is pure exposure if the platform leaks its env vars.
 
 ### 3. web
 
@@ -152,12 +161,20 @@ gh secret set API_BASE_URL           # e.g. https://api-production-xxxx.up.railw
 
 The nightly workflow POSTs to `$API_BASE_URL/internal/jobs/snapshot` with
 that bearer token at 07:00 UTC. It has `workflow_dispatch` enabled, so you
-can trigger it by hand from the Actions tab, optionally passing an `as_of`
-date to backfill or re-run a specific night.
+can trigger it by hand from the Actions tab to re-run today's night.
 
 **Manual re-runs are always safe** — the job is idempotent on
 `(artist_id, as_of_date)`, verified locally against the live API and
 covered by the I12 tests.
+
+**There is no backfill.** The snapshot endpoint rejects any `as_of` other
+than today (UTC) with a 422. Last.fm only reports current counts, so
+filing them under another date would fabricate history, both by
+overwriting a real value and by filling a gap that the growth window then
+reads as the past. A night that fails must be re-run **the same UTC day**,
+or it stays a gap. A missing day is absorbed, because growth rates
+read their base from a ±`GROWTH_BASE_WINDOW_DAYS` window
+(`core/index.py: pick_base_snapshot`), not from one exact day.
 
 ## Verifying the deploy
 
@@ -195,6 +212,30 @@ invariant I12 observed in production.
 the cron has fired on its own: everything downstream depends on history
 that only accumulates in wall-clock time, and Last.fm has no history API
 to backfill a missed night from.
+
+## Rotating production secrets
+
+Last done **2026-10-28**, after Railway's Oct 21 incident in which an
+attacker decrypted a subset of customer env vars. Every secret was rotated;
+forensics found no sign of use. If it happens again:
+
+- **Postgres password:** Postgres → Config → Connection → **Regenerate**.
+  It changes the password inside the engine *and* the variable, restarts
+  Postgres (dropping every old connection), and redeploys services that
+  reference it. Never edit `POSTGRES_PASSWORD` by hand — the engine only
+  reads it on first init, so the two drift apart and every connection
+  fails.
+- **Commit other api variable changes first** (hold Alt and click Deploy
+  to commit without redeploying), so Regenerate's automatic api redeploy
+  picks everything up at once.
+- **`INTERNAL_JOB_TOKEN`** lives in two places: the api variable and the
+  GitHub secret. Update both before the next 07:00 UTC run.
+- **`SESSION_SECRET`** rotation logs everyone out. That is the point: it
+  invalidates any session forged with the old value.
+- **Last.fm** has no regenerate button — create a new API account and
+  suspend the old one.
+- `railway variables --json` prints **resolved** values, so it can't tell
+  a `${{reference}}` from a pasted literal. Check the dashboard.
 
 ## Verifying the setup
 

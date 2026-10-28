@@ -11,7 +11,7 @@ name: nightly-snapshot
   workflow_dispatch:
     inputs:
       as_of:
-        description: "Date to snapshot (YYYY-MM-DD). Blank = today UTC."
+        description: "Leave blank. The API rejects anything but today (UTC); past dates would store today's counts under the wrong day."
         required: false
         type: string
 

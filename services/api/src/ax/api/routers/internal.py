@@ -48,8 +48,26 @@ def snapshot(
     night that failed. It defaults to the current UTC date — computed
     here, at the I/O boundary, and passed down, so the job itself stays
     time-injectable and testable.
+
+    Any `as_of` other than today is rejected. The provider only ever
+    reports *current* counts, so filing them under another date is never
+    a backfill — it fabricates history: an overwrite destroys the real
+    value (Last.fm has no history API to restore it from), and even
+    filling a gap plants today's count where the growth window will read
+    it as the past. Without this guard, anyone holding the job token could
+    move fair values by choosing which dates to write.
     """
-    as_of_date = as_of or datetime.now(UTC).date()
+    today = datetime.now(UTC).date()
+    as_of_date = as_of or today
+    if as_of_date != today:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"as_of must be today ({today} UTC), got {as_of_date}: the provider "
+                "reports current counts, so any other date would store them under the "
+                "wrong day"
+            ),
+        )
     result = run_snapshot(session, provider, as_of_date)
 
     if not result.ok:
